@@ -1,0 +1,6 @@
+{
+  "name": "产品想法调研与决策系统",
+  "description": "一个全网产品评估与市场切入战略分析系统。对新产品设想进行全网竞品扫描、痛点反馈聚类、9维深度价值评估，并自动生成下一步验证行动步骤与策略建议。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
