@@ -7,3 +7,6 @@ coverage/
 .env*
 !.env.example
 /data/
+
+# Tauri updater config (generated at build time, contains keys)
+tauri.updater.conf.json

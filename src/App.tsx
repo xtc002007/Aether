@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { useAutoUpdater } from "./hooks/useAutoUpdater";
 import { ResearchProject, AppSettings, SerializedProject, SystemReminder, PlatformWeights, ProjectSnapshot, ExportRecord } from "./types";
 import { DEFAULT_SETTINGS, DEFAULT_PLATFORM_WEIGHTS } from "./mockData";
 
@@ -49,6 +50,17 @@ export default function App() {
   const [showSearch, setShowSearch] = useState(false);
   const [searching, setSearching] = useState(false);
   const [isReSearching, setIsReSearching] = useState(false);
+
+  const {
+    updateAvailable,
+    checking: updateChecking,
+    downloading: updateDownloading,
+    downloadProgress: updateProgress,
+    readyToRestart,
+    error: updateError,
+    checkForUpdates,
+    restartApp
+  } = useAutoUpdater(true);
 
   const cn = settings.language === "zh";
 
@@ -699,6 +711,24 @@ export default function App() {
             </select>
           )}
 
+          {readyToRestart ? (
+            <button
+              onClick={restartApp}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white p-1.5 border border-emerald-600 font-mono text-[10px] font-bold px-2 text-center cursor-pointer transition"
+              title={cn ? "更新已就绪，点击重启" : "Update ready, click to restart"}
+            >
+              {cn ? "重启更新" : "Restart"}
+            </button>
+          ) : updateDownloading ? (
+            <span className="bg-amber-50 text-amber-700 p-1.5 border border-amber-200 font-mono text-[10px] font-bold px-2 flex items-center gap-1">
+              <span className="animate-spin w-2.5 h-2.5 border-2 border-amber-700 border-t-transparent rounded-full inline-block" />
+              {updateProgress?.progress != null ? `${updateProgress.progress}%` : cn ? "下载中" : "DL"}
+            </span>
+          ) : updateChecking ? (
+            <span className="text-gray-400 font-mono text-[10px] px-1">
+              <span className="animate-spin w-2.5 h-2.5 border-2 border-gray-400 border-t-transparent rounded-full inline-block" />
+            </span>
+          ) : null}
           <button
             onClick={() => setSettings(prev => ({ ...prev, language: prev.language === "zh" ? "en" : "zh" }))}
             className="bg-white hover:bg-[#F9F8F6] text-[#1C1C1C] p-1.5 border border-[#E5E2DE] font-mono text-xs font-bold w-12 text-center cursor-pointer transition dark:bg-[#22201D] dark:text-white dark:border-[#3E3A35]"

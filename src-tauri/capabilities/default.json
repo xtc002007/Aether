@@ -5,8 +5,11 @@
   "permissions": [
     "core:default",
     "core:event:default",
+    "core:window:default",
     "shell:default",
     "dialog:default",
-    "fs:default"
+    "fs:default",
+    "process:allow-restart",
+    "updater:default"
   ]
 }
