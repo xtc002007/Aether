@@ -1,16 +1,18 @@
 import React, { useState } from "react";
 import { ResearchProject, AppSettings, DimensionScore } from "../types";
-import { 
-  BarChart3, BrainCircuit, Activity, ShieldAlert, Zap, 
-  HelpCircle, Sliders, RefreshCw, Loader2, Award, AlertTriangle 
+import {
+  BarChart3, BrainCircuit, Activity, ShieldAlert, Zap,
+  HelpCircle, Sliders, RefreshCw, Loader2, Award, AlertTriangle,
+  Plus, Search, UserPlus, Settings2
 } from "lucide-react";
 
 interface EvaluationViewProps {
   project: ResearchProject;
   settings: AppSettings;
   onUpdateProject: (updated: ResearchProject) => void;
-  onReevaluate: () => Promise<void>;
+  onReevaluate: (strategyMode?: string) => Promise<void>;
   isLoading: boolean;
+  onNavigateToTab?: (tab: string) => void;
 }
 
 export default function EvaluationView({
@@ -18,43 +20,12 @@ export default function EvaluationView({
   settings,
   onUpdateProject,
   onReevaluate,
-  isLoading
+  isLoading,
+  onNavigateToTab,
 }: EvaluationViewProps) {
   const [selectedDimName, setSelectedDimName] = useState<string>("需求强度");
   const cn = settings.language === "zh";
 
-  // Dimension details translation mapping
-  const dimDescriptions: { [key: string]: string } = {
-    "需求强度": cn 
-      ? "指目标用户针对此痛点的主求助频率以及替代欲望。分数越高说明全网讨论、询问该核心痛点的人群规模越庞大、主动搜索指数越高。" 
-      : "The active frequency with which targeted users seek solutions blockades on forums.",
-    "痛点强度": cn 
-      ? "当前痛点的痛苦严重度。低分说明只是无关紧要的小毛病用Excel就能打发，高分说明由于麻烦产生的金钱或效率损失极其巨大、属于高危高痛点。" 
-      : "User suffering level. High points imply drastic loss of speed or costs, which users desperately need resolved.",
-    "市场拥挤度": cn 
-      ? "该赛道竞争对手的饱和度及头部玩家集中垄断度。低分代表基本是荒漠或存在显而易见的巨兽盲区，高分代表市场已经极度拥挤、获客昂贵。" 
-      : "Competition congestion density. Lower points imply direct blank spaces, while higher scores indicate crowded keywords.",
-    "差异化空间": cn 
-      ? "能否避开头部大厂的核心长处，找到尚未被关照的垂直群体或极简化定位。分数越高证明大厂越不情愿或由于架构问题做不了该差异点。" 
-      : "Available gaps. High scores indicate incumbents have system limitations preventing them from entering single-focus needs.",
-    "用户不满密度": cn 
-      ? "全网差评中抱怨点的统一性和声讨烈度。如果用户对竞品的卡死、昂贵等毛病极其一致、强烈且普遍地写差评，本项将报极高分数。" 
-      : "Frequency and uniformity of poor stars. A high index means users are universally crying about high fees or bloated speeds.",
-    "趋势方向": cn 
-      ? "该赛道在搜索引擎和社交谈资中的动量。高分说明属于朝阳的、高密度涌现新机会的成长流，低分说明相关问答和检索开始下行委顿。" 
-      : "Traffic search index and momentum on Google Search/social platforms.",
-    "商业化可行性": cn 
-      ? "用户掏掏腰包付真金白银的爽快度。像生产力相关的找漏插件、健身手表往往具有天然直接的现金支付场景，可快速实现营收平衡。" 
-      : "Willingness to buy. Core B2B workflows or vertical utility tools feature straightforward transaction intents.",
-    "进入门槛": cn 
-      ? "产品实现所需的技术、资源或合规复杂度。分值越高代表开发壁垒深（不容易被他人第二天仿制抄袭），低分代表极易被模仿复制损耗利润。" 
-      : "Development or legal entry complexity barrier. High values secure proprietary code advantage against fast copycats.",
-    "MVP 可验证性": cn 
-      ? "能否在一周内构建简短的一键转化落地页或 TestFlight，测试用户购买漏斗。分数越高说明该想法核心命题的测试路径越便利、成本越低。" 
-      : "Easiness to launch lightweight Landing Pages or quick newsletter tests under 1-2 weeks."
-  };
-
-  // Keep chosen dimension aligned with English mapping if changed
   const getSelectedDimTranslation = (name: string) => {
     if (cn) return name;
     const map: { [key: string]: string } = {
@@ -247,7 +218,7 @@ export default function EvaluationView({
               </div>
 
               <p className="text-xs text-gray-600 leading-relaxed border-b border-gray-100 pb-3">
-                {dimDescriptions[selectedDim.name] || dimDescriptions["需求强度"]}
+                {selectedDim.description}
               </p>
 
               <div className="space-y-1">
@@ -286,6 +257,66 @@ export default function EvaluationView({
             </div>
           </div>
         )}
+      </div>
+
+      {/* P1-5: Corrective Actions Panel */}
+      <div className="bg-white rounded-xl border border-gray-250 p-6 text-left shadow-sm">
+        <div className="flex items-center gap-2 pb-3 border-b border-gray-100 mb-4">
+          <Settings2 size={16} className="text-gray-600" />
+          <h3 className="font-bold text-gray-900 text-sm">
+            {cn ? "修正动作 / 补充调研" : "Corrective Actions"}
+          </h3>
+          <span className="text-[10px] text-gray-400 font-mono ml-auto">
+            {cn ? "评估不满意？调整后重新计算" : "Not satisfied? Adjust and recalculate"}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <button
+            onClick={() => onNavigateToTab?.("platforms")}
+            className="flex items-center gap-2 p-3 border border-[#E5E2DE] rounded-lg hover:border-black bg-white transition cursor-pointer text-left"
+          >
+            <Plus size={14} className="text-indigo-600" />
+            <div>
+              <div className="text-xs font-bold text-gray-900">{cn ? "追加平台" : "Add Platforms"}</div>
+              <div className="text-[10px] text-gray-500">{cn ? "调整平台配置" : "Adjust platform configs"}</div>
+            </div>
+          </button>
+          <button
+            onClick={() => onNavigateToTab?.("modeling")}
+            className="flex items-center gap-2 p-3 border border-[#E5E2DE] rounded-lg hover:border-black bg-white transition cursor-pointer text-left"
+          >
+            <Search size={14} className="text-indigo-600" />
+            <div>
+              <div className="text-xs font-bold text-gray-900">{cn ? "扩大查询" : "Expand Queries"}</div>
+              <div className="text-[10px] text-gray-500">{cn ? "调整关键词和类别" : "Adjust keywords & categories"}</div>
+            </div>
+          </button>
+          <button
+            onClick={() => onNavigateToTab?.("competitors")}
+            className="flex items-center gap-2 p-3 border border-[#E5E2DE] rounded-lg hover:border-black bg-white transition cursor-pointer text-left"
+          >
+            <UserPlus size={14} className="text-indigo-600" />
+            <div>
+              <div className="text-xs font-bold text-gray-900">{cn ? "补充竞品" : "Add Competitors"}</div>
+              <div className="text-[10px] text-gray-500">{cn ? "手动添加遗漏竞品" : "Manually add missed competitors"}</div>
+            </div>
+          </button>
+          <button
+            onClick={onReevaluate}
+            disabled={isLoading}
+            className="flex items-center gap-2 p-3 border border-indigo-200 rounded-lg hover:border-indigo-600 bg-indigo-50/50 transition cursor-pointer text-left disabled:opacity-50"
+          >
+            {isLoading ? (
+              <Loader2 size={14} className="animate-spin text-indigo-600" />
+            ) : (
+              <RefreshCw size={14} className="text-indigo-600" />
+            )}
+            <div>
+              <div className="text-xs font-bold text-gray-900">{cn ? "重新计算" : "Recalculate"}</div>
+              <div className="text-[10px] text-gray-500">{cn ? "含策略与验证计划" : "Strategy + validation plan"}</div>
+            </div>
+          </button>
+        </div>
       </div>
     </div>
   );

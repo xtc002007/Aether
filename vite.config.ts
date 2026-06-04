@@ -5,13 +5,24 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    base: '',
+    plugins: [
+      react(),
+      tailwindcss(),
+      // Strip crossorigin from built HTML — Tauri's custom protocol
+      // doesn't need CORS and the attribute can block script loading.
+      {
+        name: 'strip-crossorigin',
+        transformIndexHtml(html) { return html.replace(/crossorigin/g, ''); },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
     },
     server: {
+      port: 19924,
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',

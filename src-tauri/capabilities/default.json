@@ -1,0 +1,12 @@
+{
+  "identifier": "default",
+  "description": "Default capability granting core Tauri permissions",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "shell:default",
+    "dialog:default",
+    "fs:default"
+  ]
+}

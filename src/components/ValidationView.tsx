@@ -1,8 +1,11 @@
 import React, { useState } from "react";
 import { ResearchProject, AppSettings } from "../types";
-import { 
-  CheckSquare, HelpCircle, FileText, Globe, MessageSquare, 
-  Target, Rocket, ListTodo, ClipboardCopy, CheckCircle, Flame 
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
+import {
+  CheckSquare, HelpCircle, FileText, Globe, MessageSquare,
+  Target, Rocket, ListTodo, ClipboardCopy, CheckCircle, Flame,
+  Download
 } from "lucide-react";
 
 interface ValidationViewProps {
@@ -32,17 +35,60 @@ export default function ValidationView({
     setTimeout(() => setCopiedId(null), 1500);
   };
 
+  const buildMarkdownChecklist = (): string => {
+    let md = `# ${cn ? "验证行动清单" : "Validation Action Checklist"}\n\n`;
+    md += `**${cn ? "项目" : "Project"}**: ${project.name}\n`;
+    md += `**${cn ? "生成时间" : "Generated"}: ${new Date().toISOString().split("T")[0]}\n\n`;
+    md += `---\n\n`;
+    for (const plan of project.validationPlan) {
+      const doneMarker = completedItems[plan.category] ? "[x]" : "[ ]";
+      md += `## ${doneMarker} ${plan.category} (${plan.duration})\n\n`;
+      md += `- **${cn ? "目标" : "Target"}**: ${plan.target}\n`;
+      md += `- **${cn ? "行动" : "Action"}**: ${plan.action}\n`;
+      md += `- **${cn ? "预期验证" : "Expected"}**: ${plan.expectedAssertion}\n`;
+      md += `\n**${cn ? "详细执行指南" : "Execution Details"}**:\n\n${plan.details}\n\n---\n\n`;
+    }
+    return md;
+  };
+
+  const handleExportChecklist = async () => {
+    const md = buildMarkdownChecklist();
+    try {
+      const path = await save({
+        defaultPath: `${project.id}-validation-checklist.md`,
+        filters: [{ name: "Markdown", extensions: ["md"] }],
+      });
+      if (path) { await writeTextFile(path, md); }
+    } catch (_) {
+      // Fallback: browser download
+      const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `${project.id}-validation-checklist.md`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in p-1 text-left">
       <div className="bg-white rounded-xl border border-gray-250 p-6 shadow-sm space-y-3">
-        <div className="flex items-center gap-2 text-indigo-700">
-          <Rocket size={18} />
-          <h2 className="text-lg font-bold text-gray-900 font-mono">
-            {cn ? "验证阶段行动清单 (Action Plan)" : "Actionable Validation Playbook"}
-          </h2>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-indigo-700">
+            <Rocket size={18} />
+            <h2 className="text-lg font-bold text-gray-900 font-mono">
+              {cn ? "验证阶段行动清单 (Action Plan)" : "Actionable Validation Playbook"}
+            </h2>
+          </div>
+          <button
+            onClick={handleExportChecklist}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3 py-1.5 rounded flex items-center gap-1.5 transition cursor-pointer"
+          >
+            <Download size={12} />
+            {cn ? "导出为 Markdown 清单" : "Export as Markdown"}
+          </button>
         </div>
         <p className="text-xs text-gray-500 leading-relaxed font-sans">
-          {cn 
+          {cn
             ? "大宗开发前的验证行动不应当是写一万字的市场调研PPT。研究操作系统为您量身设计了一套 3-10 天的低成本假设验证行动书。点击左侧核对框，标记您的验证进度。"
             : "Instead of writing abstract strategy slides, execute this simple 10-day testing cycle. Track task completion with the checkboxes below."}
         </p>

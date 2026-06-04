@@ -1,8 +1,10 @@
-import React, { useState } from "react";
-import { ResearchProject, Competitor, AppSettings } from "../types";
-import { 
-  Building2, ExternalLink, ThumbsUp, ThumbsDown, Sparkles, 
-  Layers, ChevronRight, HelpCircle, Tag, Plus, Check, Trash2 
+import React, { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { ResearchProject, Competitor, AppSettings, CompetitorEvidence } from "../types";
+import {
+  Building2, ExternalLink, ThumbsUp, ThumbsDown, Sparkles,
+  Layers, ChevronRight, HelpCircle, Tag, Plus, Check, Trash2,
+  Link, Search, FileText
 } from "lucide-react";
 
 interface CompetitorViewProps {
@@ -42,13 +44,23 @@ export default function CompetitorView({
     "Niches": cn ? "周边邻近应用" : "Neighboring Niches"
   };
 
-  const categoriesTree = [
+  // P1-8: Build categories from idea_model.categories + standard groups
+  const ideaCategories = (project.ideaModel.categories || []).map((cat: string) => ({
+    id: `idea-${cat}`,
+    name: cat,
+    count: project.competitors.filter(c =>
+      c.name.toLowerCase().includes(cat.toLowerCase()) ||
+      c.positioning.toLowerCase().includes(cat.toLowerCase())
+    ).length,
+  }));
+  const standardCategories = [
     { id: "All", name: groupTranslation["All"], count: project.competitors.length },
     { id: "Direct Competitor", name: groupTranslation["Direct Competitor"], count: project.competitors.filter(c => c.categoryGroup.includes("Direct") || c.categoryGroup.includes("直接")).length },
     { id: "Indirect", name: groupTranslation["Indirect"], count: project.competitors.filter(c => c.categoryGroup.includes("Indirect") || c.categoryGroup.includes("间接")).length },
     { id: "Alternatives", name: groupTranslation["Alternatives"], count: project.competitors.filter(c => c.categoryGroup.includes("Alternative") || c.categoryGroup.includes("替代")).length },
     { id: "Niches", name: groupTranslation["Niches"], count: project.competitors.filter(c => c.categoryGroup.includes("Niche") || c.categoryGroup.includes("邻近")).length },
   ];
+  const categoriesTree = [...standardCategories, ...ideaCategories];
 
   // Filtering Competitors
   const filteredComps = project.competitors.filter(c => {
@@ -62,67 +74,82 @@ export default function CompetitorView({
 
   const selectedComp = project.competitors.find(c => c.id === selectedCompId) || filteredComps[0] || null;
 
-  const handleAddCompetitor = (e: React.FormEvent) => {
+  // Evidence panel state (after selectedComp is defined)
+  const [evidence, setEvidence] = useState<CompetitorEvidence[]>([]);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+
+  // Fetch evidence when selected competitor changes
+  useEffect(() => {
+    if (!selectedComp) { setEvidence([]); return; }
+    setEvidenceLoading(true);
+    invoke<CompetitorEvidence[]>("get_competitor_evidence", {
+      projectId: project.id,
+      competitorName: selectedComp.name,
+    })
+      .then(setEvidence)
+      .catch(() => setEvidence([]))
+      .finally(() => setEvidenceLoading(false));
+  }, [selectedComp?.id, project.id]);
+
+  const handleAddCompetitor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName) return;
 
-    const newCompetitor: Competitor = {
-      id: "comp-" + Date.now(),
-      name: newName,
-      url: newUrl || "#",
-      positioning: newPos || (cn ? "用户手工补充的竞品定位说明" : "User-added competitor profile description"),
-      targetUser: cn ? "待定高粘性客户群" : "TBD Cohort",
-      coreFeatures: newFeatures || "Standard functionalities",
-      pricing: newPricing,
-      platforms: ["Web"],
-      ratings: 4.0,
-      reviewsCount: 1,
-      pros: newPros || "N/A",
-      cons: newCons || "N/A",
-      opportunity: cn ? "待定差异化空间" : "TBD differentiation space",
-      categoryGroup: newGroup
-    };
+    try {
+      const newCompetitor = await invoke<Competitor>("add_competitor", {
+        projectId: project.id,
+        name: newName,
+        url: newUrl,
+        positioning: newPos,
+        pricing: newPricing,
+        coreFeatures: newFeatures,
+        pros: newPros,
+        cons: newCons,
+        categoryGroup: newGroup,
+      });
 
-    const updatedCompetitors = [...project.competitors, newCompetitor];
-    onUpdateProject({
-      ...project,
-      competitors: updatedCompetitors
-    });
+      onUpdateProject({
+        ...project,
+        competitors: [...project.competitors, newCompetitor]
+      });
 
-    // Reset Form
-    setIsAdding(false);
-    setNewName("");
-    setNewUrl("");
-    setNewPos("");
-    setNewPricing("$9/mo");
-    setNewFeatures("");
-    setNewPros("");
-    setNewCons("");
-    setSelectedCompId(newCompetitor.id);
-  };
-
-  const handleDeleteCompetitor = (compId: string) => {
-    const updated = project.competitors.filter(c => c.id !== compId);
-    onUpdateProject({
-      ...project,
-      competitors: updated
-    });
-    if (selectedCompId === compId) {
-      setSelectedCompId(updated[0]?.id || null);
+      setIsAdding(false);
+      setNewName("");
+      setNewUrl("");
+      setNewPos("");
+      setNewPricing("$9/mo");
+      setNewFeatures("");
+      setNewPros("");
+      setNewCons("");
+      setSelectedCompId(newCompetitor.id);
+    } catch (err) {
+      console.error("Failed to add competitor:", err);
     }
   };
 
-  const handleChangeGroup = (compId: string, nextGroup: string) => {
-    const updated = project.competitors.map(c => {
-      if (c.id === compId) {
-        return { ...c, categoryGroup: nextGroup };
+  const handleDeleteCompetitor = async (compId: string) => {
+    try {
+      await invoke("delete_competitor", { projectId: project.id, competitorId: compId });
+      const updated = project.competitors.filter(c => c.id !== compId);
+      onUpdateProject({ ...project, competitors: updated });
+      if (selectedCompId === compId) {
+        setSelectedCompId(updated[0]?.id || null);
       }
-      return c;
-    });
-    onUpdateProject({
-      ...project,
-      competitors: updated
-    });
+    } catch (err) {
+      console.error("Failed to delete competitor:", err);
+    }
+  };
+
+  const handleChangeGroup = async (compId: string, nextGroup: string) => {
+    try {
+      await invoke("move_competitor_group", { projectId: project.id, competitorId: compId, newGroup: nextGroup });
+      const updated = project.competitors.map(c =>
+        c.id === compId ? { ...c, categoryGroup: nextGroup } : c
+      );
+      onUpdateProject({ ...project, competitors: updated });
+    } catch (err) {
+      console.error("Failed to move competitor:", err);
+    }
   };
 
   return (
@@ -480,6 +507,84 @@ export default function CompetitorView({
                   <span className="font-sans font-medium">{feat.trim()}</span>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* A6/B2: Evidence Sources — real data from search_results table */}
+          <div className="bg-white border border-gray-200 rounded-xl p-5 text-left space-y-3">
+            <h4 className="font-mono font-bold text-xs text-gray-500 uppercase border-b border-gray-100 pb-1.5 flex items-center gap-1.5">
+              <FileText size={12} />
+              {cn ? "证据溯源" : "Evidence Sources"}
+            </h4>
+            <div className="space-y-2 max-h-[260px] overflow-y-auto">
+              {evidenceLoading ? (
+                <p className="text-[10px] text-gray-400 italic">{cn ? "加载证据中..." : "Loading evidence..."}</p>
+              ) : evidence.length > 0 ? (
+                <>
+                  <div className="text-[10px] text-gray-400 font-mono uppercase">
+                    {cn ? `${evidence.length} 条证据` : `${evidence.length} evidence items`}
+                  </div>
+                  {evidence.map((ev, idx) => (
+                    <div key={idx} className="p-2 rounded border border-gray-100 bg-gray-50/50 space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                        <span className="text-[10px] font-mono text-gray-400">{ev.platform}</span>
+                        {ev.url && (
+                          <a href={ev.url} target="_blank" rel="noopener noreferrer"
+                            className="text-[9px] text-indigo-500 hover:text-indigo-700 flex items-center gap-0.5">
+                            <Link size={8} />{cn ? "来源" : "source"}
+                          </a>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-gray-700 leading-relaxed line-clamp-2">{ev.title || ev.summary}</p>
+                      <div className="flex items-center gap-1 text-[9px] text-gray-400 font-mono">
+                        <Search size={8} />
+                        <span className="truncate">{ev.queryText}</span>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : selectedComp.platforms.length > 0 ? (
+                <>
+                  <div className="text-[10px] text-gray-400 font-mono uppercase">
+                    {cn ? `发现于 ${selectedComp.platforms.length} 个平台` : `Found on ${selectedComp.platforms.length} platforms`}
+                  </div>
+                  {selectedComp.platforms.map((p, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 p-1.5 rounded border border-gray-100">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                      <span className="font-mono">{p}</span>
+                    </div>
+                  ))}
+                  {selectedComp.url !== "#" && (
+                    <a href={selectedComp.url} target="_blank" rel="noopener noreferrer"
+                      className="text-[10px] text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-2 font-mono">
+                      <ExternalLink size={10} />
+                      {cn ? "查看原始链接" : "View source"}
+                    </a>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-gray-400 italic">
+                  {cn ? "暂无证据溯源信息" : "No evidence sources recorded"}
+                </p>
+              )}
+              {selectedComp.ratings > 0 && (
+                <div className="pt-2 border-t border-gray-100">
+                  <div className="flex items-center gap-2 text-[10px] font-mono text-gray-500">
+                    <span className="text-amber-500">★ {selectedComp.ratings}</span>
+                    <span>·</span>
+                    <span>{selectedComp.reviewsCount} {cn ? "条评价" : "reviews"}</span>
+                  </div>
+                </div>
+              )}
+              {/* A8: Show last_updated if available */}
+              {selectedComp.lastUpdated && (
+                <div className="pt-1 border-t border-gray-100">
+                  <span className="text-[9px] text-gray-400 font-mono">
+                    {cn ? "最近更新: " : "Last updated: "}{selectedComp.lastUpdated}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>

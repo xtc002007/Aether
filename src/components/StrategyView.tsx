@@ -1,23 +1,116 @@
-import React from "react";
-import { ResearchProject, AppSettings } from "../types";
-import { 
-  Compass, Map, ShieldCheck, ShieldAlert, Sparkles, 
-  CornerDownRight, CheckSquare, Dumbbell, Star, MessageSquare 
+import React, { useState, useEffect, useRef } from "react";
+import { ResearchProject, AppSettings, Strategy } from "../types";
+import {
+  Compass, Map, ShieldCheck, ShieldAlert, Sparkles,
+  CornerDownRight, CheckSquare, Dumbbell, Star, MessageSquare, Loader2
 } from "lucide-react";
 
 interface StrategyViewProps {
   project: ResearchProject;
   settings: AppSettings;
+  onSwitchMode?: (mode: string) => void;
+  isLoading?: boolean;
 }
+
+const STRATEGY_MODES = [
+  { id: "conservative", labelCn: "保守切入", labelEn: "Conservative Entry",
+    descCn: "控制风险，优先低成本验证", descEn: "Min risk, validate first" },
+  { id: "aggressive", labelCn: "激进切入", labelEn: "Aggressive Entry",
+    descCn: "快速占领市场，高举高打", descEn: "Move fast, capture market" },
+  { id: "low_cost_first", labelCn: "低成本验证优先", labelEn: "Low-Cost Validation",
+    descCn: "用最小资源验证核心假设", descEn: "Min resources to prove core hypothesis" },
+  { id: "high_diff", labelCn: "高差异化优先", labelEn: "High Differentiation",
+    descCn: "瞄准竞品最薄弱环节猛攻", descEn: "Attack weakest competitor points" },
+];
 
 export default function StrategyView({
   project,
-  settings
+  settings,
+  onSwitchMode,
+  isLoading
 }: StrategyViewProps) {
   const cn = settings.language === "zh";
+  const [activeMode, setActiveMode] = useState<string>("conservative");
+  const [previousStrategy, setPreviousStrategy] = useState<Strategy | null>(null);
+  const [changedFields, setChangedFields] = useState<Set<string>>(new Set());
+  const wasLoading = useRef(false);
+
+  // Detect when re_evaluate completes: compare old vs new strategy
+  useEffect(() => {
+    if (wasLoading.current && !isLoading && previousStrategy) {
+      const changed = new Set<string>();
+      const s = project.strategy;
+      const p = previousStrategy;
+      if (s.marketScenario !== p.marketScenario) changed.add("marketScenario");
+      if (s.suggestedPath !== p.suggestedPath) changed.add("suggestedPath");
+      if (s.positioningStatement !== p.positioningStatement) changed.add("positioningStatement");
+      if (JSON.stringify(s.mustHaveFeatures) !== JSON.stringify(p.mustHaveFeatures)) changed.add("mustHaveFeatures");
+      if (JSON.stringify(s.avoidFeatures) !== JSON.stringify(p.avoidFeatures)) changed.add("avoidFeatures");
+      if (s.offensiveTactics !== p.offensiveTactics) changed.add("offensiveTactics");
+      setChangedFields(changed);
+      if (changed.size > 0) {
+        setTimeout(() => setChangedFields(new Set()), 4000);
+      }
+    }
+    wasLoading.current = !!isLoading;
+  }, [isLoading]);
+
+  const handleModeSwitch = (mode: string) => {
+    setActiveMode(mode);
+    setPreviousStrategy({ ...project.strategy });
+    setChangedFields(new Set());
+    if (onSwitchMode) onSwitchMode(mode);
+  };
+
+  const diffClass = (field: string): string =>
+    changedFields.has(field) ? "ring-2 ring-amber-400 bg-amber-50/30 animate-pulse" : "";
+
+  const diffLabel = (field: string) =>
+    changedFields.has(field) ? (
+      <span className="text-[9px] text-amber-700 bg-amber-100 px-1 py-0.5 rounded font-mono ml-2 animate-fade-in">
+        {cn ? "已更新" : "UPDATED"}
+      </span>
+    ) : null;
 
   return (
     <div className="space-y-6 animate-fade-in p-1 text-left">
+      {/* Strategy Mode Switcher */}
+      <div className="bg-white rounded-xl border border-gray-250 p-4 shadow-sm">
+        <div className="flex items-center gap-2 pb-2 mb-3 border-b border-gray-100">
+          <span className="text-[10px] font-bold text-gray-400 font-mono uppercase tracking-widest">
+            {cn ? "切入模式" : "ENTRY MODE"}
+          </span>
+          {isLoading && (
+            <Loader2 size={12} className="animate-spin text-indigo-500" />
+          )}
+          {!isLoading && changedFields.size > 0 && (
+            <span className="text-[9px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-mono animate-fade-in ml-auto">
+              {cn ? `${changedFields.size} 项策略已更新` : `${changedFields.size} fields updated`}
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {STRATEGY_MODES.map((mode) => (
+            <button
+              key={mode.id}
+              onClick={() => handleModeSwitch(mode.id)}
+              className={`p-3 rounded-lg border text-left transition duration-150 cursor-pointer ${
+                activeMode === mode.id
+                  ? "border-indigo-600 bg-indigo-50 ring-1 ring-indigo-600"
+                  : "border-gray-200 hover:border-gray-300 bg-white"
+              }`}
+            >
+              <div className="text-xs font-bold text-gray-800">
+                {cn ? mode.labelCn : mode.labelEn}
+              </div>
+              <div className="text-[9px] text-gray-400 mt-0.5 leading-relaxed">
+                {cn ? mode.descCn : mode.descEn}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Upper strategic indicators */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl border border-gray-250 p-6 shadow-sm space-y-4">
@@ -27,7 +120,8 @@ export default function StrategyView({
               {cn ? "市场竞争格局判定" : "Market Scenario Categorizer"}
             </h3>
           </div>
-          <div className="bg-indigo-50/50 p-4 rounded-lg border border-indigo-100/60 font-sans font-semibold text-indigo-950 text-sm">
+          <div className={`bg-indigo-50/50 p-4 rounded-lg border border-indigo-100/60 font-sans font-semibold text-indigo-950 text-sm transition-all duration-500 ${diffClass("marketScenario")}`}>
+            {diffLabel("marketScenario")}
             {project.strategy.marketScenario}
           </div>
           <p className="text-xs text-gray-500 leading-relaxed">
@@ -44,7 +138,8 @@ export default function StrategyView({
               {cn ? "推荐的最佳切入路径" : "Recommended Entering Lane"}
             </h3>
           </div>
-          <div className="bg-emerald-50/50 p-4 rounded-lg border border-emerald-100/60 font-sans font-bold text-emerald-950 text-sm">
+          <div className={`bg-emerald-50/50 p-4 rounded-lg border border-emerald-100/60 font-sans font-bold text-emerald-950 text-sm transition-all duration-500 ${diffClass("suggestedPath")}`}>
+            {diffLabel("suggestedPath")}
             🚀 {project.strategy.suggestedPath}
           </div>
           <p className="text-xs text-gray-500 leading-relaxed">
@@ -68,7 +163,8 @@ export default function StrategyView({
           <h3 className="text-base font-mono font-bold text-gray-300">
             {cn ? "一句话产品商业定位 (Value Pitch Sentence)" : "Core Positioning Statement"}
           </h3>
-          <p className="text-lg md:text-xl font-sans tracking-tight font-semibold leading-relaxed text-indigo-100">
+          <p className={`text-lg md:text-xl font-sans tracking-tight font-semibold leading-relaxed text-indigo-100 transition-all duration-500 ${diffClass("positioningStatement")}`}>
+            {diffLabel("positioningStatement")}
             {project.strategy.positioningStatement}
           </p>
           <p className="text-[11px] text-gray-400 font-sans leading-relaxed pt-2">
@@ -95,8 +191,13 @@ export default function StrategyView({
               : "Skeleton features to achieve. Zero fluff, fully devoted to verifying if people pay for the basic pipeline."}
           </p>
           <div className="space-y-2.5 pt-2">
+            {changedFields.has("mustHaveFeatures") && (
+              <span className="text-[9px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-mono animate-fade-in inline-block">
+                {cn ? "已更新" : "UPDATED"}
+              </span>
+            )}
             {project.strategy.mustHaveFeatures.map((feat, idx) => (
-              <div key={idx} className="flex items-start gap-2.5 text-xs text-gray-700">
+              <div key={idx} className={`flex items-start gap-2.5 text-xs text-gray-700 p-1 rounded transition-all duration-300 ${changedFields.has("mustHaveFeatures") ? "bg-amber-50/50" : ""}`}>
                 <CornerDownRight size={12} className="text-emerald-500 shrink-0 mt-0.5" />
                 <span className="font-sans font-medium leading-relaxed">{feat}</span>
               </div>
@@ -118,8 +219,13 @@ export default function StrategyView({
               : "Blockades to prevent scope fatigue. Avoid multi-user permissions or complex settings setups early."}
           </p>
           <div className="space-y-2.5 pt-2">
+            {changedFields.has("avoidFeatures") && (
+              <span className="text-[9px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-mono animate-fade-in inline-block">
+                {cn ? "已更新" : "UPDATED"}
+              </span>
+            )}
             {project.strategy.avoidFeatures.map((feat, idx) => (
-              <div key={idx} className="flex items-start gap-2.5 text-xs text-gray-700">
+              <div key={idx} className={`flex items-start gap-2.5 text-xs text-gray-700 p-1 rounded transition-all duration-300 ${changedFields.has("avoidFeatures") ? "bg-amber-50/50" : ""}`}>
                 <ShieldAlert size={12} className="text-rose-500 shrink-0 mt-0.5" />
                 <span className="font-sans font-medium leading-relaxed text-gray-600 line-through decoration-rose-300">{feat}</span>
               </div>
@@ -133,8 +239,9 @@ export default function StrategyView({
         <h4 className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
           <Compass size={16} className="text-gray-600" />
           {cn ? "对标主渠道的分发突破手段 (Tactics)" : "Outbound Marketing Breakthrough Tactics"}
+          {diffLabel("offensiveTactics")}
         </h4>
-        <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-line font-sans">
+        <p className={`text-xs text-gray-700 leading-relaxed whitespace-pre-line font-sans rounded p-2 transition-all duration-500 ${diffClass("offensiveTactics")}`}>
           {project.strategy.offensiveTactics}
         </p>
       </div>

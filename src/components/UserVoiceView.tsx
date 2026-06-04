@@ -1,8 +1,9 @@
 import React, { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { ResearchProject, UserVoice, AppSettings } from "../types";
-import { 
-  Users, MessageSquare, ThumbsUp, ThumbsDown, Filter, Calendar, 
-  ExternalLink, Plus, CheckCircle, Search, HelpCircle 
+import {
+  Users, MessageSquare, ThumbsUp, ThumbsDown, Filter, Calendar,
+  ExternalLink, Plus, CheckCircle, Search, HelpCircle
 } from "lucide-react";
 
 interface UserVoiceViewProps {
@@ -36,18 +37,16 @@ export default function UserVoiceView({
 
   const cn = settings.language === "zh";
 
-  // Distinct topics聚类 counting
-  const topicsCountMap: { [key: string]: number } = {};
-  project.userVoices.forEach(v => {
-    v.topics.forEach(t => {
-      topicsCountMap[t] = (topicsCountMap[t] || 0) + 1;
-    });
-  });
-
-  const uniqueTopics = Object.keys(topicsCountMap).map(name => ({
-    name,
-    count: topicsCountMap[name]
-  })).sort((a,b) => b.count - a.count);
+  const uniqueTopics = (project.topicClusters ?? []).map(tc => ({
+    name: tc.name,
+    count: tc.count,
+    negativeCount: tc.negativeCount,
+    positiveCount: tc.positiveCount,
+    neutralCount: tc.neutralCount,
+    frictionPercentage: tc.frictionPercentage,
+    platforms: tc.platforms,
+    sampleQuotes: tc.sampleQuotes,
+  }));
 
   // Filtering list
   const filteredVoices = project.userVoices.filter(v => {
@@ -61,42 +60,45 @@ export default function UserVoiceView({
     return true;
   });
 
-  const handleAddVoiceSubmit = (e: React.FormEvent) => {
+  const handleAddVoiceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newContent) return;
 
-    const newVoice: UserVoice = {
-      id: "voice-" + Date.now(),
-      userName: newUserName || "anonymous_user",
-      platform: newPlatform,
-      title: newTitle || (cn ? "用户补充的反馈主题" : "User-input comment subject"),
-      content: newContent,
-      sentiment: newSentiment,
-      topics: newTopic ? [newTopic] : [cn ? "自定义补充" : "User-added"],
-      quote: newContent.slice(0, 40) + "...",
-      strength: "medium",
-      sourceUrl: "https://example.com/source",
-      timestamp: new Date().toISOString().split('T')[0]
-    };
+    try {
+      const newVoice = await invoke<UserVoice>("add_user_voice", {
+        projectId: project.id,
+        userName: newUserName,
+        platform: newPlatform,
+        title: newTitle,
+        content: newContent,
+        sentiment: newSentiment,
+        topic: newTopic,
+        sourceUrl: "https://example.com/source",
+      });
 
-    onUpdateProject({
-      ...project,
-      userVoices: [newVoice, ...project.userVoices]
-    });
+      onUpdateProject({
+        ...project,
+        userVoices: [newVoice, ...project.userVoices]
+      });
 
-    setIsAddingVoice(false);
-    setNewUserName("");
-    setNewTitle("");
-    setNewContent("");
-    setNewTopic("");
+      setIsAddingVoice(false);
+      setNewUserName("");
+      setNewTitle("");
+      setNewContent("");
+      setNewTopic("");
+    } catch (err) {
+      console.error("Failed to add user voice:", err);
+    }
   };
 
-  const handleDeleteVoice = (voiceId: string) => {
-    const updated = project.userVoices.filter(v => v.id !== voiceId);
-    onUpdateProject({
-      ...project,
-      userVoices: updated
-    });
+  const handleDeleteVoice = async (voiceId: string) => {
+    try {
+      await invoke("delete_user_voice", { projectId: project.id, voiceId });
+      const updated = project.userVoices.filter(v => v.id !== voiceId);
+      onUpdateProject({ ...project, userVoices: updated });
+    } catch (err) {
+      console.error("Failed to delete voice:", err);
+    }
   };
 
   return (
@@ -158,9 +160,21 @@ export default function UserVoiceView({
               onChange={(e) => setNewPlatform(e.target.value)}
             >
               <option value="Reddit">Reddit Forum</option>
+              <option value="Quora">Quora</option>
               <option value="G2 / Capterra">G2 / software site</option>
+              <option value="Trustpilot">Trustpilot</option>
               <option value="App Store">Apple App Store</option>
+              <option value="Google Play">Google Play</option>
+              <option value="Chrome Web Store">Chrome Web Store</option>
+              <option value="Product Hunt">Product Hunt</option>
               <option value="X (Twitter)">X / Twitter</option>
+              <option value="YouTube">YouTube</option>
+              <option value="TikTok">TikTok</option>
+              <option value="LinkedIn">LinkedIn</option>
+              <option value="Zhihu">Zhihu</option>
+              <option value="Tieba">Tieba</option>
+              <option value="Douban">Douban</option>
+              <option value="Amazon">Amazon</option>
               <option value="Others">Others</option>
             </select>
           </div>
@@ -234,10 +248,7 @@ export default function UserVoiceView({
                 {cn ? "未找到相关的分析主题。" : "No clusters available."}
               </div>
             ) : (
-              uniqueTopics.map((topic, idx) => {
-                const associatedCount = project.userVoices.filter(v => v.topics.includes(topic.name)).length;
-                const withNeg = project.userVoices.filter(v => v.topics.includes(topic.name) && v.sentiment === "negative").length;
-                return (
+              uniqueTopics.map((topic, idx) => (
                   <div
                     key={idx}
                     className="p-5 rounded-xl border border-gray-200 hover:border-gray-300 bg-white shadow-sm flex flex-col justify-between"
@@ -248,23 +259,23 @@ export default function UserVoiceView({
                           # {topic.name}
                         </span>
                         <span className="text-xs text-gray-500 font-mono font-bold">
-                          {associatedCount} {cn ? "条相关文献" : "instances"}
+                          {topic.count} {cn ? "条相关文献" : "instances"}
                         </span>
                       </div>
                       <h4 className="font-bold text-gray-900 text-sm">
                         {cn ? `关于【${topic.name}】的用户摩擦` : `User friction on ${topic.name}`}
                       </h4>
                       <p className="text-xs text-gray-500">
-                        {cn 
-                          ? `在此主题下，多达 ${withNeg} 个负面极端反馈指出竞品设计漏洞，形成切入挡板。`
-                          : `Under this semantic node, ${withNeg} dissatisfied users express blockades.`}
+                        {cn
+                          ? `在此主题下，多达 ${topic.negativeCount} 个负面极端反馈指出竞品设计漏洞，形成切入挡板。`
+                          : `Under this semantic node, ${topic.negativeCount} dissatisfied users express blockades.`}
                       </p>
                     </div>
 
                     <div className="pt-4 border-t border-gray-100 mt-4 flex justify-between items-center">
                       <div className="flex items-center gap-1.5 text-[10px] font-mono">
                         <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                        {cn ? `不满意度: ${Math.round((withNeg / associatedCount) * 100)}%` : `Friction: ${Math.round((withNeg / associatedCount) * 100)}%`}
+                        {cn ? `不满意度: ${Math.round(topic.frictionPercentage)}%` : `Friction: ${Math.round(topic.frictionPercentage)}%`}
                       </div>
                       <button
                         onClick={() => {
@@ -277,8 +288,7 @@ export default function UserVoiceView({
                       </button>
                     </div>
                   </div>
-                );
-              })
+                ))
             )}
           </div>
 

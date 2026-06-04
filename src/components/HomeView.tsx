@@ -1,8 +1,11 @@
-import React, { useState } from "react";
-import { ResearchProject, AppSettings } from "../types";
-import { 
-  FolderPlus, Plus, Calendar, CheckCircle2, AlertCircle, PlayCircle, Loader2, 
-  Layers, Database, BarChart3, Radio, FileText, ArrowRight, Sparkles 
+import React, { useState, useEffect } from "react";
+import { ResearchProject, AppSettings, AppStats } from "../types";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import {
+  FolderPlus, Plus, Calendar, CheckCircle2, AlertCircle, PlayCircle, Loader2,
+  Layers, Database, BarChart3, Radio, FileText, ArrowRight, Sparkles, Trash2, History,
+  Zap, Telescope, Activity, Server
 } from "lucide-react";
 
 interface HomeViewProps {
@@ -13,27 +16,102 @@ interface HomeViewProps {
     productForm: string;
     targetUser: string;
     scenario: string;
+    researchMode: string;
   }) => void;
   settings: AppSettings;
   isCreating: boolean;
   searchProgress: number;
+  progressStage?: string;
+  progressMessage?: string;
+  progressWarning?: string;
+  onOpenSnapshotManager?: (projectId: string) => void;
 }
 
 export default function HomeView({
-  projects,
-  onSelectProject,
-  onCreateProject,
-  settings,
-  isCreating,
-  searchProgress
+  projects, onSelectProject, onCreateProject, settings,
+  isCreating, searchProgress,
+  progressStage, progressMessage, progressWarning,
+  onOpenSnapshotManager,
 }: HomeViewProps) {
   const [statement, setStatement] = useState("");
   const [productForm, setProductForm] = useState("SaaS");
   const [targetUser, setTargetUser] = useState("");
   const [scenario, setScenario] = useState("");
+  const [researchMode, setResearchMode] = useState("quick");
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [snapshotCounts, setSnapshotCounts] = useState<Record<string, number>>({});
+  const [stats, setStats] = useState<AppStats>({ totalProjects: 0, totalCompetitors: 0, totalRawDocuments: 0, recent7dProjects: 0 });
+
+  // B5: Track running analysis tasks
+  const [runningTasks, setRunningTasks] = useState<{
+    platform: string; query: string; status: string; count: number; durationMs: number;
+  }[]>([]);
+  const [isAnyRunning, setIsAnyRunning] = useState(false);
+  const [runningPlatforms, setRunningPlatforms] = useState<string[]>([]);
 
   const cn = settings.language === "zh";
+
+  // B5: Listen to task-progress for real-time background task cards
+  useEffect(() => {
+    let unlisten1: (() => void) | undefined;
+    let unlisten2: (() => void) | undefined;
+    (async () => {
+      unlisten1 = await listen<{ stage: string }>("analysis-progress", (event) => {
+        if (event.payload.stage === "searching") setIsAnyRunning(true);
+        if (event.payload.stage === "complete") {
+          setIsAnyRunning(false);
+          setRunningTasks([]);
+          setRunningPlatforms([]);
+        }
+      });
+      unlisten2 = await listen<{
+        platform: string; query: string; status: string; count: number; durationMs: number;
+      }>("task-progress", (event) => {
+        const tp = event.payload;
+        setIsAnyRunning(true);
+        setRunningTasks(prev => {
+          const existing = prev.findIndex(t => t.platform === tp.platform && t.query === tp.query);
+          const newTask = { platform: tp.platform, query: tp.query, status: tp.status, count: tp.count, durationMs: tp.durationMs };
+          if (existing >= 0) { const copy = [...prev]; copy[existing] = newTask; return copy; }
+          return [...prev, newTask];
+        });
+        setRunningPlatforms(prev => prev.includes(tp.platform) ? prev : [...prev, tp.platform]);
+      });
+    })();
+    return () => { unlisten1?.(); unlisten2?.(); };
+  }, []);
+
+  useEffect(() => {
+    async function loadCounts() {
+      try {
+        const counts = await invoke<[string, number][]>("get_snapshot_counts");
+        const map: Record<string, number> = {};
+        for (const [pid, count] of counts) {
+          map[pid] = count;
+        }
+        setSnapshotCounts(map);
+      } catch (_) {}
+      try {
+        const s = await invoke<AppStats>("get_stats");
+        setStats(s);
+      } catch (_) {}
+    }
+    loadCounts();
+  }, [projects.length]);
+
+  const handleDeleteProject = async (id: string, name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(cn ? `确定要删除项目「${name}」吗？此操作不可恢复。` : `Delete project "${name}"? This cannot be undone.`)) return;
+    setDeletingId(id);
+    try {
+      await invoke("delete_project", { projectId: id });
+    } catch (err) {
+      console.error("Failed to delete project:", err);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const templates = [
     {
@@ -74,14 +152,10 @@ export default function HomeView({
       statement,
       productForm,
       targetUser,
-      scenario
+      scenario,
+      researchMode
     });
   };
-
-  // Stat Calculations
-  const totalProjects = projects.length;
-  const totalCompetitors = projects.reduce((acc, p) => acc + p.competitors.length, 0);
-  const totalVoices = projects.reduce((acc, p) => acc + p.userVoices.length, 0);
 
   return (
     <div className="space-y-8 animate-fade-in p-2 text-[#1C1C1C]">
@@ -102,19 +176,23 @@ export default function HomeView({
           </p>
         </div>
 
-        {/* 3 Pillars Metrics */}
-        <div className="grid grid-cols-3 gap-6 mt-8 pt-8 border-t border-[#E5E2DE] text-left">
+        {/* 4 Pillars Metrics from DB */}
+        <div className="grid grid-cols-4 gap-6 mt-8 pt-8 border-t border-[#E5E2DE] text-left">
           <div className="space-y-1">
             <div className="text-[#8C8882] text-[10px] font-mono uppercase tracking-widest font-bold">{cn ? "调研项目总数" : "Total Projects"}</div>
-            <div className="text-2xl md:text-3xl font-serif italic font-bold text-[#1C1C1C]">{totalProjects}</div>
+            <div className="text-2xl md:text-3xl font-serif italic font-bold text-[#1C1C1C]">{stats.totalProjects}</div>
           </div>
           <div className="space-y-1">
-            <div className="text-[#8C8882] text-[10px] font-mono uppercase tracking-widest font-bold">{cn ? "已扫描竞争对手" : "Aggregated Competitors"}</div>
-            <div className="text-2xl md:text-3xl font-serif italic font-bold text-[#1C1C1C]">{totalCompetitors}</div>
+            <div className="text-[#8C8882] text-[10px] font-mono uppercase tracking-widest font-bold">{cn ? "已扫描竞争对手" : "Agg. Competitors"}</div>
+            <div className="text-2xl md:text-3xl font-serif italic font-bold text-[#1C1C1C]">{stats.totalCompetitors}</div>
           </div>
           <div className="space-y-1">
-            <div className="text-[#8C8882] text-[10px] font-mono uppercase tracking-widest font-bold">{cn ? "已分析反馈原始证据" : "Parsed Reviews & Posts"}</div>
-            <div className="text-2xl md:text-3xl font-serif italic font-bold text-[#1C1C1C]">{totalVoices}</div>
+            <div className="text-[#8C8882] text-[10px] font-mono uppercase tracking-widest font-bold">{cn ? "原始证据总数" : "Raw Documents"}</div>
+            <div className="text-2xl md:text-3xl font-serif italic font-bold text-[#1C1C1C]">{stats.totalRawDocuments}</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-[#8C8882] text-[10px] font-mono uppercase tracking-widest font-bold">{cn ? "最近 7 天新增" : "Recent 7 Days"}</div>
+            <div className="text-2xl md:text-3xl font-serif italic font-bold text-[#1C1C1C]">{stats.recent7dProjects}</div>
           </div>
         </div>
       </div>
@@ -149,11 +227,18 @@ export default function HomeView({
                     />
                   </div>
                   <p className="text-[11px] text-[#5C5852] font-mono uppercase tracking-wider">
-                    {searchProgress < 25 && (cn ? "正在对想法进行核心关键词自动建模..." : "Analyzing text; extracting search keywords packets...")}
-                    {searchProgress >= 25 && searchProgress < 50 && (cn ? "激活 Reddit 与 G2 接口进行高重合度文本流抓取..." : "Triggering Reddit & G2 API crawlers for complaint reviews...")}
-                    {searchProgress >= 50 && searchProgress < 75 && (cn ? "识别匹配行业主竞品形态并生成 9 维评估基准..." : "Identifying candidate competitors and compiling evaluation matrices...")}
-                    {searchProgress >= 75 && (cn ? "自动设计最契合的市场切入点与 MVP 落地验证策略..." : "Generating custom entering strategy & action landing blueprint...")}
+                    {progressStage || (cn ? "正在处理..." : "Processing...")}
                   </p>
+                  {progressWarning && (
+                    <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-300 rounded p-3 mt-2 font-sans leading-relaxed whitespace-pre-line">
+                      {progressWarning}
+                    </p>
+                  )}
+                  {progressMessage && (
+                    <p className="text-[10px] text-[#8C8882] font-sans mt-1">
+                      {progressMessage}
+                    </p>
+                  )}
                 </div>
               </div>
             ) : (
@@ -244,6 +329,37 @@ export default function HomeView({
                   </div>
                 </div>
 
+                {/* Research Mode Selector */}
+                <div className="space-y-2 pt-2">
+                  <span className="text-[10px] font-bold text-[#5C5852] font-mono tracking-widest uppercase block">
+                    {cn ? "研究深度模式" : "Research Depth Mode"}
+                  </span>
+                  <div className="flex gap-3">
+                    <label className={`flex items-center gap-2 p-3 border cursor-pointer transition flex-1 ${
+                      researchMode === "quick" ? "border-black bg-black text-white" : "border-[#E5E2DE] bg-white text-[#1C1C1C] hover:border-black"
+                    }`}>
+                      <input type="radio" name="researchMode" value="quick" checked={researchMode === "quick"}
+                        onChange={() => setResearchMode("quick")} className="sr-only" />
+                      <Zap size={14} />
+                      <div>
+                        <div className="font-bold text-xs">{cn ? "快速模式" : "Quick"}</div>
+                        <div className="text-[10px] opacity-70">{cn ? "核心平台，单轮搜索" : "Core platforms, single-round"}</div>
+                      </div>
+                    </label>
+                    <label className={`flex items-center gap-2 p-3 border cursor-pointer transition flex-1 ${
+                      researchMode === "deep" ? "border-black bg-black text-white" : "border-[#E5E2DE] bg-white text-[#1C1C1C] hover:border-black"
+                    }`}>
+                      <input type="radio" name="researchMode" value="deep" checked={researchMode === "deep"}
+                        onChange={() => setResearchMode("deep")} className="sr-only" />
+                      <Telescope size={14} />
+                      <div>
+                        <div className="font-bold text-xs">{cn ? "深度模式" : "Deep"}</div>
+                        <div className="text-[10px] opacity-70">{cn ? "两轮搜索 + 社区词汇精化" : "Two-round + vocab refinement"}</div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
                 <div className="pt-4 border-t border-[#E5E2DE] flex justify-end">
                   <button
                     type="submit"
@@ -259,8 +375,46 @@ export default function HomeView({
           </div>
         </div>
 
-        {/* Right Column: Historical / Active Projects */}
+        {/* Right Column: Background Tasks + Historical Projects */}
         <div className="space-y-6">
+          {/* B5: Background Running Task Cards */}
+          {isAnyRunning && (
+            <div className="bg-amber-50/80 border border-amber-300 p-5 space-y-3 animate-fade-in">
+              <div className="flex items-center gap-2 pb-3 border-b border-amber-200">
+                <Activity size={16} className="text-amber-700 animate-pulse" />
+                <h2 className="text-sm font-serif italic font-bold text-amber-900">
+                  {cn ? "后台采集运行中" : "Background Collection Running"}
+                </h2>
+                <span className="text-[10px] text-amber-600 font-mono ml-auto">
+                  {runningPlatforms.length} {cn ? "个平台" : "platforms"} · {runningTasks.length} {cn ? "个任务" : "tasks"}
+                </span>
+              </div>
+              <div className="space-y-1.5 max-h-[180px] overflow-y-auto">
+                {runningPlatforms.map(platform => {
+                  const pts = runningTasks.filter(t => t.platform === platform);
+                  const done = pts.filter(t => t.status === "success" || t.status === "empty").length;
+                  const total = pts.length;
+                  const totalResults = pts.reduce((s, t) => s + t.count, 0);
+                  return (
+                    <div key={platform} className="flex items-center justify-between p-2 bg-white rounded border border-amber-200 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Server size={12} className="text-amber-600" />
+                        <span className="font-mono font-bold text-gray-800">{platform}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[10px] font-mono text-gray-500">
+                        <span>{done}/{total} {cn ? "完成" : "done"}</span>
+                        <span className="font-bold text-emerald-600">{totalResults} {cn ? "结果" : "results"}</span>
+                        <div className="w-16 bg-gray-100 h-1 rounded-full overflow-hidden">
+                          <div className="bg-amber-500 h-full rounded-full transition-all" style={{ width: `${total > 0 ? (done / total) * 100 : 0}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white border border-[#E5E2DE] p-6">
             <div className="flex items-center gap-2 pb-4 mb-4 border-b border-[#E5E2DE]">
               <Layers className="text-[#1C1C1C]" size={16} />
@@ -316,9 +470,30 @@ export default function HomeView({
                         <Calendar size={10} />
                         {project.createdAt}
                       </span>
-                      <span className="font-bold">
-                        {project.competitors.length} {cn ? "个竞品" : "Comps"} · {project.userVoices.length} {cn ? "条反响" : "Voices"}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold">
+                          {project.competitors.length} {cn ? "个竞品" : "Comps"} · {project.userVoices.length} {cn ? "条反响" : "Voices"}
+                          {(snapshotCounts[project.id] ?? 0) > 0 && (
+                            <> · <span className="text-indigo-600">{snapshotCounts[project.id]} {cn ? "版本" : "vers"}</span></>
+                          )}
+                        </span>
+                        {onOpenSnapshotManager && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onOpenSnapshotManager(project.id); }}
+                            className="text-indigo-500 hover:text-indigo-700 p-1 rounded transition cursor-pointer"
+                            title={cn ? "版本历史" : "Version history"}
+                          >
+                            <History size={10} />
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => handleDeleteProject(project.id, project.name || project.ideaModel.statement, e)}
+                          className="text-gray-400 hover:text-rose-600 p-1 rounded transition cursor-pointer"
+                          title={cn ? "删除项目" : "Delete project"}
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -333,10 +508,32 @@ export default function HomeView({
               {cn ? "为什么要调研之后做决策？" : "Why Research Inputs First?"}
             </h4>
             <p className="text-xs text-[#5C5852] leading-relaxed">
-              {cn 
+              {cn
                 ? "独立的软件工程师与决策团队最大的风险在『闭门造车』，用半年写出一个根本没人要或者大厂功能早已涵盖、体验完爆的伪需求。本工具帮您在写下第一行代码前，理智地用来自 Reddit、App Store 的高饱和度负面吐槽作为设计突破口，进行降维拦截式定位。"
                 : "The primary risk for solo developers is over-engineering a pseudo-demand. Finding dense poor G2/Reddit complaints serves as the most strategic product layout weapon to intercept premium incumbents."}
             </p>
+          </div>
+
+          {/* System Reminders */}
+          <div className="bg-white border border-[#E5E2DE] p-6 space-y-3">
+            <h4 className="font-bold text-[#1C1C1C] text-xs uppercase tracking-widest font-mono flex items-center gap-2">
+              <AlertCircle size={14} className="text-amber-500" />
+              {cn ? "系统状态与提醒" : "System Status & Reminders"}
+            </h4>
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded p-2.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                <span>{cn ? "首次使用建议在「设置中心」检查各平台配置" : "First-time users: check platform configs in Settings"}</span>
+              </div>
+              <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-2.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                <span>{cn ? "数据库正常运行 (SQLite WAL 模式)" : "Database operational (SQLite WAL mode)"}</span>
+              </div>
+              <div className="flex items-center gap-2 text-gray-600 bg-gray-50 border border-gray-200 rounded p-2.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                <span>{cn ? "支持 8 类数据源，默认启用 4 个核心平台" : "8 data source types, 4 core platforms enabled by default"}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
