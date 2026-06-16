@@ -104,6 +104,13 @@ jobs:
           workspaces: src-tauri -> target
           cache-bin: false
 
+      - name: Build shared SDK
+        shell: bash
+        run: |
+          cd ../NexusTools-shared/nexustools-sdk
+          npm install
+          npm run build
+
       - name: Install frontend dependencies
         run: npm ci
 
