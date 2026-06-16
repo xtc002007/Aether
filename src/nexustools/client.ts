@@ -15,5 +15,5 @@ export function getNexusClient(): NexusToolsClient {
 }
 
 export function getWebsiteUrl(): string {
-  return import.meta.env.VITE_NEXUSTOOLS_WEBSITE_URL || 'http://localhost:19220';
+  return import.meta.env.VITE_NEXUSTOOLS_WEBSITE_URL || 'https://nexustools.tech';
 }

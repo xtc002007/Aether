@@ -179,6 +179,8 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_NEXUSTOOLS_API_URL: https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev
+          VITE_NEXUSTOOLS_WEBSITE_URL: https://nexustools.tech
         with:
           args: ${{ steps.tauri_args.outputs.args }} --config tauri.updater.conf.json
 
