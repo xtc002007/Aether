@@ -112,7 +112,7 @@ jobs:
           npm run build
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Prepare updater config
         shell: bash
