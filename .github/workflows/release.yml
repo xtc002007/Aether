@@ -112,7 +112,11 @@ jobs:
           npm run build
 
       - name: Install frontend dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          npm install --no-audit --no-fund
+          mkdir -p node_modules/nexustools-sdk
+          cp -r ../NexusTools-shared/nexustools-sdk/dist node_modules/nexustools-sdk/
+          cp ../NexusTools-shared/nexustools-sdk/package.json node_modules/nexustools-sdk/
 
       - name: Prepare updater config
         shell: bash
