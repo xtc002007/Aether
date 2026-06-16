@@ -1,6 +1,6 @@
 [package]
 name = "aether"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Aether - Product Idea Research & Decision Workstation"
 
@@ -31,3 +31,4 @@ log = "0.4"
 env_logger = "0.11"
 async-trait = "0.1"
 tauri-plugin-store = "2"
+tauri-plugin-deep-link = "2"
