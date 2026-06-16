@@ -48,7 +48,12 @@ jobs:
         with:
           repository: xtc002007/NexusTools-shared
           token: ${{ secrets.PAT_TOKEN }}
-          path: ../NexusTools-shared
+          path: NexusTools-shared-temp
+
+      - name: Move shared SDK to sibling path
+        shell: bash
+        run: |
+          mv NexusTools-shared-temp ../NexusTools-shared
 
       - name: Checkout release scripts
         uses: actions/checkout@v4
