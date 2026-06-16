@@ -15,9 +15,11 @@
     "@tauri-apps/plugin-fs": "^2.5.1",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.3.5",
+    "@tauri-apps/plugin-store": "^2.4.3",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "@vitejs/plugin-react": "^5.0.4",
     "lucide-react": "^0.546.0",
+    "nexustools-sdk": "file:../../shared/nexustools-sdk",
     "react": "^19.0.1",
     "react-dom": "^19.0.1"
   },

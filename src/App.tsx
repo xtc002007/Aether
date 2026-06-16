@@ -20,6 +20,10 @@ import SettingView from "./components/SettingView";
 import PlatformConfigView from "./components/PlatformConfigView";
 import CompareView from "./components/CompareView";
 import SnapshotManager from "./components/SnapshotManager";
+import { AccountPanel } from "./nexustools/AccountPanel";
+import { useNexusAuth } from "./nexustools/useNexusAuth";
+import { AuthModal } from "./nexustools/AuthModal";
+import { getWebsiteUrl, getNexusClient } from "./nexustools/client";
 
 import {
   Home, Layers, Settings, Play, Layout,
@@ -30,6 +34,66 @@ import {
 } from "lucide-react";
 
 export default function App() {
+  const { user, isLoggedIn, loginWithToken, logout } = useNexusAuth();
+  const [authOpen, setAuthOpen] = useState(false);
+
+  const handleDesktopLogin = async () => {
+    const sessionId = 'session_' + Math.random().toString(36).substring(2, 11);
+    const baseUrl = getWebsiteUrl();
+    const loginUrl = `${baseUrl}/?session_id=${sessionId}`;
+    console.log("[Aether Auth] Generated sessionId:", sessionId);
+    console.log("[Aether Auth] Website loginUrl:", loginUrl);
+    
+    try {
+      const { open } = await import('@tauri-apps/plugin-shell');
+      await open(loginUrl);
+      console.log("[Aether Auth] Opened loginUrl via Tauri shell plugin");
+    } catch (e) {
+      console.warn("[Aether Auth] Failed to open via Tauri shell, falling back to window.open", e);
+      window.open(loginUrl, '_blank');
+    }
+
+    const isLocal = baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1');
+    const syncApiUrl = isLocal ? 'http://localhost:19221' : (import.meta.env.VITE_NEXUSTOOLS_API_URL || 'https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev');
+    const pollUrl = `${syncApiUrl}/api/auth/desktop-token?sessionId=${sessionId}`;
+    console.log("[Aether Auth] Will poll from syncApiUrl:", syncApiUrl, "with pollUrl:", pollUrl);
+
+    let pollCount = 0;
+    const pollInterval = setInterval(async () => {
+      pollCount++;
+      try {
+        console.log(`[Aether Auth] Polling #${pollCount}...`);
+        const response = await fetch(pollUrl);
+        console.log(`[Aether Auth] Polling #${pollCount} response status:`, response.status);
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`[Aether Auth] Polling #${pollCount} data:`, data);
+          if (data.token) {
+            console.log("[Aether Auth] Success! Got token from poll:", data.token.substring(0, 15) + "...");
+            clearInterval(pollInterval);
+            await loginWithToken(data.token);
+            addReminder("success", cn ? "同步成功，已成功登录 Nexus 账号！" : "Sync successful, logged in to Nexus!");
+            try {
+              console.log("[Aether Auth] Attempting to set focus to current window...");
+              const { getCurrentWindow } = await import('@tauri-apps/api/window');
+              await getCurrentWindow().setFocus();
+              console.log("[Aether Auth] setFocus() completed");
+            } catch (err) {
+              console.error("[Aether Auth] Failed to focus window:", err);
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`[Aether Auth] Failed to poll desktop token (attempt #${pollCount}):`, err);
+      }
+    }, 2000);
+
+    setTimeout(() => {
+      console.log("[Aether Auth] Polling timeout reached, clearing interval");
+      clearInterval(pollInterval);
+    }, 300000);
+  };
+
   const [projects, setProjects] = useState<ResearchProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [currentTab, setCurrentTab] = useState<string>("home");
@@ -737,6 +801,44 @@ export default function App() {
             {cn ? "EN" : "中"}
           </button>
 
+          {isLoggedIn ? (
+            <div className="flex items-center gap-2 border-l border-[#E5E2DE] pl-3 dark:border-[#3E3A35]">
+              <span className="text-xs text-gray-500 font-medium hidden lg:inline">
+                {user?.username || user?.email}
+              </span>
+              <button
+                onClick={async () => {
+                  const token = getNexusClient().auth.getToken();
+                  const baseUrl = getWebsiteUrl();
+                  const url = token ? `${baseUrl}?token=${encodeURIComponent(token)}` : baseUrl;
+                  try {
+                    const { open } = await import('@tauri-apps/plugin-shell');
+                    await open(url);
+                  } catch {
+                    window.open(url, '_blank');
+                  }
+                }}
+                className="bg-transparent hover:bg-indigo-50 text-indigo-600 border border-indigo-200 hover:border-indigo-400 text-xs font-semibold py-1 px-2.5 rounded transition cursor-pointer dark:text-indigo-400 dark:border-indigo-900/60 dark:hover:bg-indigo-950/20"
+                title={cn ? "已登录: 点击一键同步并登录至网页端" : "Logged in: Click to sync and open website"}
+              >
+                {cn ? "前往网页版" : "Open Website"}
+              </button>
+              <button
+                onClick={logout}
+                className="text-xs text-rose-500 hover:text-rose-600 font-medium transition cursor-pointer pl-1"
+              >
+                登出
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleDesktopLogin}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-1.5 px-3 border border-indigo-600 rounded transition cursor-pointer"
+            >
+              登录 Nexus
+            </button>
+          )}
+
           {/* FTS5 Search */}
           <div className="relative">
             <div className="flex items-center gap-1 bg-[#F9F8F6] border border-[#E5E2DE] rounded px-2 py-1 dark:bg-[#22201D] dark:border-[#3E3A35]">
@@ -807,7 +909,7 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar Navigation */}
         <nav className={`bg-[#F9F8F6] text-[#1C1C1C] border-r border-[#E5E2DE] flex flex-col justify-between transition-all duration-300 shrink-0 dark:bg-[#191816] dark:border-[#3E3A35] dark:text-[#F5F3EF] ${isSidebarCollapsed ? "w-16" : "w-60"}`}>
-          <div className="space-y-1.5 py-4 px-3 overflow-y-auto">
+          <div className="flex-1 min-h-0 space-y-1.5 py-4 px-3 overflow-y-auto">
             <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#E5E2DE] px-1 text-[#8C8882] text-[10px] font-mono font-bold uppercase tracking-widest">
               <span>{!isSidebarCollapsed && (cn ? "工作流程" : "WORKFLOW")}</span>
               <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="hover:text-black p-1 rounded transition cursor-pointer">
@@ -862,12 +964,9 @@ export default function App() {
               );
             })}
           </div>
-          {!isSidebarCollapsed && (
-            <div className="p-3 border-t border-[#E5E2DE] text-center text-[10px] text-[#8C8882] font-mono uppercase tracking-widest dark:border-[#3E3A35]">
-              <div>Aether v0.1 — Tauri</div>
-              <div>{cn ? "本地优先 · 自包含" : "Local-first · Self-contained"}</div>
-            </div>
-          )}
+          <div className="mt-auto border-t border-[#E5E2DE] dark:border-[#3E3A35]">
+            <AccountPanel compact={isSidebarCollapsed} onLoginClick={handleDesktopLogin} />
+          </div>
         </nav>
 
         {/* Main Workspace */}
@@ -1210,6 +1309,7 @@ export default function App() {
           onRestoreComplete={handleRestoreFromSnapshot}
         />
       )}
+      <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
     </div>
   );
 }

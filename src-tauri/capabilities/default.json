@@ -10,6 +10,8 @@
     "dialog:default",
     "fs:default",
     "process:allow-restart",
-    "updater:default"
+    "updater:default",
+    "store:default",
+    "core:window:allow-set-focus"
   ]
 }
