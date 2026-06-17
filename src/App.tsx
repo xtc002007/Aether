@@ -53,8 +53,7 @@ export default function App() {
       window.open(loginUrl, '_blank');
     }
 
-    const isLocal = baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1');
-    const syncApiUrl = isLocal ? 'http://localhost:19221' : (import.meta.env.VITE_NEXUSTOOLS_API_URL || 'https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev');
+    const syncApiUrl = import.meta.env.VITE_NEXUSTOOLS_API_URL || 'https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev';
     const pollUrl = `${syncApiUrl}/api/auth/desktop-token?sessionId=${sessionId}`;
     console.log("[Aether Auth] Will poll from syncApiUrl:", syncApiUrl, "with pollUrl:", pollUrl);
 
@@ -139,6 +138,55 @@ export default function App() {
   const dismissReminder = (id: string) => {
     setReminders(prev => prev.map(r => r.id === id ? { ...r, dismissed: true } : r));
   };
+
+  // Listen to deep-link events
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let active = true;
+
+    async function setupListener() {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        const fn = await listen<string[]>('deeplink-url', async (event) => {
+          if (!active) return;
+          console.log("[Aether Deeplink] Received arguments:", event.payload);
+          const args = event.payload;
+          const urlArg = args.find(arg => arg.startsWith('aether://'));
+          if (urlArg) {
+            console.log("[Aether Deeplink] Found custom protocol URL:", urlArg);
+            try {
+              // Try regex parsing first as it's more reliable for custom protocols that don't conform to standard host/port URL shapes
+              const match = urlArg.match(/[?&]token=([^&]+)/);
+              if (match && match[1]) {
+                const token = decodeURIComponent(match[1]);
+                console.log("[Aether Deeplink] Logging in with extracted token...");
+                await loginWithToken(token);
+                addReminder("success", cn ? "同步成功，已成功登录 Nexus 账号！" : "Sync successful, logged in to Nexus!");
+              }
+            } catch (e) {
+              console.error("[Aether Deeplink] Parse error:", e);
+            }
+          }
+        });
+        if (active) {
+          unlisten = fn;
+        } else {
+          fn();
+        }
+      } catch (err) {
+        console.error("[Aether Deeplink] Failed to setup listener:", err);
+      }
+    }
+
+    setupListener();
+
+    return () => {
+      active = false;
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, [loginWithToken, cn, addReminder]);
 
   // Check Tauri availability on mount
   useEffect(() => {

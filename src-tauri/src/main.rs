@@ -4,7 +4,7 @@ use aether_lib::commands::{self, AppState};
 use aether_lib::db::Database;
 use aether_lib::scheduler::Scheduler;
 use std::sync::Arc;
-use tauri::Manager;
+use tauri::{Manager, Emitter};
 
 fn main() {
     env_logger::init();
@@ -17,6 +17,13 @@ fn main() {
     let scheduler = Arc::new(Scheduler::new(settings));
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            if let Some(main_window) = app.get_webview_window("main") {
+                let _ = main_window.set_focus();
+                let _ = main_window.show();
+            }
+            let _ = app.emit("deeplink-url", argv);
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -30,6 +37,15 @@ fn main() {
                 scheduler,
                 app_handle: app.handle().clone(),
             });
+
+            // Handle deep link passed on cold startup
+            let args: Vec<String> = std::env::args().collect();
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                let _ = app_handle.emit("deeplink-url", args);
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

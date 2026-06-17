@@ -12,6 +12,7 @@
     "process:allow-restart",
     "updater:default",
     "store:default",
+    "deep-link:default",
     "core:window:allow-set-focus"
   ]
 }
