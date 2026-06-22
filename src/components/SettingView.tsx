@@ -1,34 +1,78 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AppSettings, PlatformConfig } from "../types";
+import type { NativeAppUpdateProgress } from "../updater";
 import {
   Settings, Globe, Zap, Database, Cpu, Monitor, Wrench, Sliders,
   Trash2, RefreshCw, Save, BellRing, ShieldCheck, HelpCircle, HardDrive,
-  Check, XCircle, Loader2
+  Check, XCircle, Loader2, Download
 } from "lucide-react";
 
 interface SettingViewProps {
   settings: AppSettings;
   onUpdateSettings: (next: AppSettings) => void;
+  updateChecking?: boolean;
+  updateDownloading?: boolean;
+  updateInstalling?: boolean;
+  updateProgress?: NativeAppUpdateProgress | null;
+  readyToRestart?: boolean;
+  updateAvailable?: boolean;
+  updateError?: string | null;
+  remoteVersion?: string | null;
+  onCheckForUpdates?: () => Promise<unknown>;
+  onDownloadUpdate?: () => Promise<boolean>;
+  onRestartUpdate?: () => void;
 }
 
 type SaveStatus = { kind: "idle" } | { kind: "saving" } | { kind: "ok"; msg: string } | { kind: "err"; msg: string };
 
-export default function SettingView({ settings, onUpdateSettings }: SettingViewProps) {
+export default function SettingView({
+  settings,
+  onUpdateSettings,
+  updateChecking = false,
+  updateDownloading = false,
+  updateInstalling = false,
+  updateProgress = null,
+  readyToRestart = false,
+  updateAvailable = false,
+  updateError = null,
+  remoteVersion = null,
+  onCheckForUpdates,
+  onDownloadUpdate,
+  onRestartUpdate,
+}: SettingViewProps) {
   const [activeTab, setActiveTab] = useState<string>("platforms");
   const [platformConfigs, setPlatformConfigs] = useState<PlatformConfig[]>([]);
   const [configsLoaded, setConfigsLoaded] = useState(false);
   const [configsLoadError, setConfigsLoadError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [apiKeyLoaded, setApiKeyLoaded] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<string | null>(null);
   const [logLevel, setLogLevel] = useState(settings.logLevel || "info");
   const [queryLimit, setQueryLimit] = useState(20);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
+  const [appVersion, setAppVersion] = useState<string>("…");
 
   const cn = settings.language === "zh";
   const t = (cnT: string, enT: string) => cn ? cnT : enT;
+  const isUpdating = updateChecking || updateDownloading || updateInstalling;
 
   // ── Load Data ──
+  useEffect(() => {
+    let active = true;
+    async function loadVersion() {
+      try {
+        const { getVersion } = await import("@tauri-apps/api/app");
+        const version = await getVersion();
+        if (active) setAppVersion(version);
+      } catch {
+        if (active) setAppVersion(import.meta.env.VITE_APP_VERSION ?? "dev");
+      }
+    }
+    loadVersion();
+    return () => { active = false; };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -147,6 +191,29 @@ export default function SettingView({ settings, onUpdateSettings }: SettingViewP
     setLogLevel(level);
     persistSettings({ ...settings, logLevel: level });
   }, [settings, persistSettings]);
+
+  const handleCheckUpdates = useCallback(async () => {
+    if (!onCheckForUpdates) return;
+    setUpdateStatus(null);
+    const update = await onCheckForUpdates();
+    if (readyToRestart) {
+      setUpdateStatus(t("更新已下载，点击「立即升级」完成安装。", "Update downloaded. Click Upgrade Now to install."));
+      return;
+    }
+    if (update) {
+      setUpdateStatus(t("发现新版本，正在下载...", "New version found. Downloading..."));
+      if (onDownloadUpdate) {
+        const ok = await onDownloadUpdate();
+        if (ok) {
+          setUpdateStatus(t("更新已下载，点击「立即升级」完成安装。", "Update downloaded. Click Upgrade Now to install."));
+        } else {
+          setUpdateStatus(t("下载失败，请稍后重试。", "Download failed. Please try again later."));
+        }
+      }
+      return;
+    }
+    setUpdateStatus(t("当前已是最新版本。", "You are on the latest version."));
+  }, [onCheckForUpdates, onDownloadUpdate, readyToRestart, cn]);
 
   // ── Clear Cache ──
   const handleClearCache = useCallback(async () => {
@@ -477,6 +544,98 @@ export default function SettingView({ settings, onUpdateSettings }: SettingViewP
         </div>
       </div>
 
+      {/* App Updates */}
+      <div className="p-4 border border-gray-200 rounded-lg bg-white space-y-3">
+        <h4 className="font-bold text-xs text-gray-800 font-mono uppercase flex items-center gap-2">
+          <Download size={14} /> {t("应用更新", "App Updates")}
+        </h4>
+
+        <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 border border-slate-100">
+          <span className="text-xs text-gray-600">{t("当前版本", "Current Version")}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm font-bold text-gray-900">v{appVersion}</span>
+            {isUpdating && (
+              <span className="inline-flex items-center gap-1 text-amber-600" title={updateChecking ? t("检查更新中", "Checking for updates") : t("下载更新中", "Downloading update")}>
+                <Loader2 size={14} className="animate-spin" />
+                <span className="text-[10px] font-mono animate-pulse">
+                  {updateDownloading && updateProgress?.progress != null
+                    ? `${updateProgress.progress}%`
+                    : updateChecking
+                      ? t("检查中", "Checking")
+                      : updateInstalling
+                        ? t("安装中", "Installing")
+                        : t("下载中", "Downloading")}
+                </span>
+              </span>
+            )}
+            {readyToRestart && !isUpdating && (
+              <span className="text-[10px] font-mono font-bold text-emerald-600 animate-pulse">
+                {t("待升级", "Ready")}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {remoteVersion && updateAvailable && (
+          <p className="text-[10px] text-indigo-700 font-mono">
+            {t(`发现新版本 v${remoteVersion}`, `New version v${remoteVersion} available`)}
+          </p>
+        )}
+
+        {updateError && (
+          <p className="text-[10px] text-red-600 font-mono break-all">{updateError}</p>
+        )}
+
+        <p className="text-[10px] text-gray-500">
+          {t("启动时自动检查更新，并在后台下载。关闭后仅可手动检查。", "Auto-check on startup and download in background. When off, use manual check only.")}
+        </p>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-600">{t("自动更新", "Auto Update")}</span>
+          <button
+            onClick={() => persistSettings({ ...settings, autoUpdateEnabled: !settings.autoUpdateEnabled })}
+            className={`text-xs font-semibold px-4 py-1.5 rounded-lg cursor-pointer transition ${
+              settings.autoUpdateEnabled ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+            }`}
+          >
+            {settings.autoUpdateEnabled ? t("开启", "ON") : t("关闭", "OFF")}
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleCheckUpdates}
+            disabled={updateChecking || updateDownloading || updateInstalling || !onCheckForUpdates}
+            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-1.5 rounded-lg cursor-pointer transition flex items-center gap-1.5"
+          >
+            {updateChecking ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            {updateChecking ? t("检查中...", "Checking...") : t("检查更新", "Check for Updates")}
+          </button>
+          {readyToRestart && onRestartUpdate && (
+            <button
+              onClick={onRestartUpdate}
+              disabled={updateInstalling}
+              className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-semibold px-4 py-1.5 rounded-lg cursor-pointer transition flex items-center gap-1.5"
+            >
+              {updateInstalling ? <Loader2 size={12} className="animate-spin" /> : null}
+              {updateInstalling ? t("安装中...", "Installing...") : t("立即升级", "Upgrade Now")}
+            </button>
+          )}
+          {updateDownloading && (
+            <span className="text-[10px] text-amber-700 font-mono flex items-center gap-1">
+              <Loader2 size={10} className="animate-spin" />
+              {updateProgress?.progress != null
+                ? `${t("下载中", "Downloading")} ${updateProgress.progress}%`
+                : t("下载中...", "Downloading...")}
+            </span>
+          )}
+          {!updateDownloading && updateAvailable && !readyToRestart && (
+            <span className="text-[10px] text-indigo-700 font-mono">{t("有新版本可用", "Update available")}</span>
+          )}
+        </div>
+        {updateStatus && (
+          <p className="text-[10px] text-gray-600 font-mono">{updateStatus}</p>
+        )}
+      </div>
+
       {/* Log Level */}
       <div className="p-4 border border-gray-200 rounded-lg bg-white space-y-3">
         <h4 className="font-bold text-xs text-gray-800 font-mono uppercase flex items-center gap-2">
@@ -499,7 +658,7 @@ export default function SettingView({ settings, onUpdateSettings }: SettingViewP
         <p className="text-[10px] text-amber-700">{t("重置所有配置到默认值。项目数据不受影响。", "Reset all settings to defaults.")}</p>
         <button onClick={() => {
           if (confirm(t("确定要重置所有配置吗？", "Reset all settings to defaults?"))) {
-            const defaults: AppSettings = { language: "zh", theme: "light", globalMaxConcurrent: 8, defaultCrawlDepth: "quick", autoBackup: true, saveHtml: false, sqlitePath: "./data/aether.db", logLevel: "info" };
+            const defaults: AppSettings = { language: "zh", theme: "light", globalMaxConcurrent: 8, defaultCrawlDepth: "quick", autoBackup: true, autoUpdateEnabled: true, saveHtml: false, sqlitePath: "./data/aether.db", logLevel: "info" };
             setLogLevel("info");
             setApiKey("");
             persistSettings(defaults);

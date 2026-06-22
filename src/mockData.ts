@@ -6,6 +6,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   globalMaxConcurrent: 8,
   defaultCrawlDepth: "quick",
   autoBackup: true,
+  autoUpdateEnabled: true,
   saveHtml: false,
   sqlitePath: "./data/aether.db",
   logLevel: "info",

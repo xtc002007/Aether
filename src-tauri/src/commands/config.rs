@@ -4,6 +4,33 @@ use tauri::State;
 use crate::commands::AppState;
 
 #[tauri::command]
+pub fn get_system_proxy_url() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        let script = r#"
+$s = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+if ($s.ProxyEnable -ne 1 -or -not $s.ProxyServer) { exit 1 }
+$server = ($s.ProxyServer -split ';' | Select-Object -First 1).Trim()
+if ($server -notmatch '^https?://') { $server = "http://$server" }
+Write-Output $server
+"#;
+        let output = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", script])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if value.is_empty() { None } else { Some(value) }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
+}
+
+#[tauri::command]
 pub async fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, String> {
     let conn = state.db.conn.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn.prepare("SELECT key, value FROM app_settings").map_err(|e| e.to_string())?;
@@ -20,6 +47,7 @@ pub async fn get_settings(state: State<'_, AppState>) -> Result<AppSettings, Str
             "global_max_concurrent" => settings.global_max_concurrent = value.parse().unwrap_or(8),
             "default_crawl_depth" => settings.default_crawl_depth = match value.as_str() { "deep" => ResearchMode::Deep, _ => ResearchMode::Quick },
             "auto_backup" => settings.auto_backup = value == "true",
+            "auto_update_enabled" => settings.auto_update_enabled = value == "true",
             "save_html" => settings.save_html = value == "true",
             "sqlite_path" => settings.sqlite_path = value,
             "log_level" => settings.log_level = value,
@@ -38,6 +66,7 @@ pub async fn update_settings(state: State<'_, AppState>, settings: AppSettings) 
         ("global_max_concurrent", settings.global_max_concurrent.to_string()),
         ("default_crawl_depth", match settings.default_crawl_depth { ResearchMode::Deep => "deep".into(), ResearchMode::Quick => "quick".into() }),
         ("auto_backup", settings.auto_backup.to_string()),
+        ("auto_update_enabled", settings.auto_update_enabled.to_string()),
         ("save_html", settings.save_html.to_string()),
         ("sqlite_path", settings.sqlite_path),
         ("log_level", settings.log_level),

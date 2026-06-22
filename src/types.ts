@@ -264,6 +264,7 @@ export interface AppSettings {
   globalMaxConcurrent: number;
   defaultCrawlDepth: "quick" | "deep";
   autoBackup: boolean;
+  autoUpdateEnabled: boolean;
   saveHtml: boolean;
   sqlitePath: string;
   logLevel: string;

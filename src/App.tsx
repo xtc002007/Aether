@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { save } from "@tauri-apps/plugin-dialog";
@@ -23,31 +23,28 @@ import SnapshotManager from "./components/SnapshotManager";
 import { AccountPanel } from "./nexustools/AccountPanel";
 import { useNexusAuth } from "./nexustools/useNexusAuth";
 import { AuthModal } from "./nexustools/AuthModal";
-import { getWebsiteUrl, getNexusClient } from "./nexustools/client";
+import { getWebsiteUrl } from "./nexustools/client";
 
 import {
   Home, Layers, Settings, Play, Layout,
   ChevronLeft, ChevronRight, HelpCircle, ArrowLeftRight,
   Download, Compass, CheckSquare, Search,
   MessageSquare, Sliders, Radio, RefreshCw, FileText as ReportIcon,
-  ClipboardCopy, Bell, History, X as XIcon
+  ClipboardCopy, Bell, History, X as XIcon, Loader2
 } from "lucide-react";
 
 export default function App() {
-  const { user, isLoggedIn, loginWithToken, logout } = useNexusAuth();
+  const { loginWithToken } = useNexusAuth();
   const [authOpen, setAuthOpen] = useState(false);
 
   const handleDesktopLogin = async () => {
     const sessionId = 'session_' + Math.random().toString(36).substring(2, 11);
     const baseUrl = getWebsiteUrl();
     const loginUrl = `${baseUrl}/?session_id=${sessionId}`;
-    console.log("[Aether Auth] Generated sessionId:", sessionId);
-    console.log("[Aether Auth] Website loginUrl:", loginUrl);
-    
+
     try {
       const { open } = await import('@tauri-apps/plugin-shell');
       await open(loginUrl);
-      console.log("[Aether Auth] Opened loginUrl via Tauri shell plugin");
     } catch (e) {
       console.warn("[Aether Auth] Failed to open via Tauri shell, falling back to window.open", e);
       window.open(loginUrl, '_blank');
@@ -55,28 +52,21 @@ export default function App() {
 
     const syncApiUrl = import.meta.env.VITE_NEXUSTOOLS_API_URL || 'https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev';
     const pollUrl = `${syncApiUrl}/api/auth/desktop-token?sessionId=${sessionId}`;
-    console.log("[Aether Auth] Will poll from syncApiUrl:", syncApiUrl, "with pollUrl:", pollUrl);
 
     let pollCount = 0;
     const pollInterval = setInterval(async () => {
       pollCount++;
       try {
-        console.log(`[Aether Auth] Polling #${pollCount}...`);
         const response = await fetch(pollUrl);
-        console.log(`[Aether Auth] Polling #${pollCount} response status:`, response.status);
         if (response.ok) {
           const data = await response.json();
-          console.log(`[Aether Auth] Polling #${pollCount} data:`, data);
           if (data.token) {
-            console.log("[Aether Auth] Success! Got token from poll:", data.token.substring(0, 15) + "...");
             clearInterval(pollInterval);
             await loginWithToken(data.token);
             addReminder("success", cn ? "同步成功，已成功登录 Nexus 账号！" : "Sync successful, logged in to Nexus!");
             try {
-              console.log("[Aether Auth] Attempting to set focus to current window...");
               const { getCurrentWindow } = await import('@tauri-apps/api/window');
               await getCurrentWindow().setFocus();
-              console.log("[Aether Auth] setFocus() completed");
             } catch (err) {
               console.error("[Aether Auth] Failed to focus window:", err);
             }
@@ -88,7 +78,6 @@ export default function App() {
     }, 2000);
 
     setTimeout(() => {
-      console.log("[Aether Auth] Polling timeout reached, clearing interval");
       clearInterval(pollInterval);
     }, 300000);
   };
@@ -112,18 +101,24 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<{ title: string; content: string; platform: string }[]>([]);
   const [showSearch, setShowSearch] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [isReSearching, setIsReSearching] = useState(false);
 
   const {
     updateAvailable,
     checking: updateChecking,
     downloading: updateDownloading,
+    installing: updateInstalling,
     downloadProgress: updateProgress,
     readyToRestart,
     error: updateError,
+    remoteVersion,
     checkForUpdates,
+    downloadAvailableUpdate,
     restartApp
-  } = useAutoUpdater(true);
+  } = useAutoUpdater(settings.autoUpdateEnabled ?? true);
 
   const cn = settings.language === "zh";
 
@@ -139,6 +134,21 @@ export default function App() {
     setReminders(prev => prev.map(r => r.id === id ? { ...r, dismissed: true } : r));
   };
 
+  useEffect(() => {
+    if (!searchExpanded) return;
+    searchInputRef.current?.focus();
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        if (!searchQuery) {
+          setSearchExpanded(false);
+          setShowSearch(false);
+        }
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [searchExpanded, searchQuery]);
+
   // Listen to deep-link events
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -149,17 +159,13 @@ export default function App() {
         const { listen } = await import('@tauri-apps/api/event');
         const fn = await listen<string[]>('deeplink-url', async (event) => {
           if (!active) return;
-          console.log("[Aether Deeplink] Received arguments:", event.payload);
           const args = event.payload;
           const urlArg = args.find(arg => arg.startsWith('aether://'));
           if (urlArg) {
-            console.log("[Aether Deeplink] Found custom protocol URL:", urlArg);
             try {
-              // Try regex parsing first as it's more reliable for custom protocols that don't conform to standard host/port URL shapes
               const match = urlArg.match(/[?&]token=([^&]+)/);
               if (match && match[1]) {
                 const token = decodeURIComponent(match[1]);
-                console.log("[Aether Deeplink] Logging in with extracted token...");
                 await loginWithToken(token);
                 addReminder("success", cn ? "同步成功，已成功登录 Nexus 账号！" : "Sync successful, logged in to Nexus!");
               }
@@ -187,6 +193,19 @@ export default function App() {
       }
     };
   }, [loginWithToken, cn, addReminder]);
+
+  // Notify when update is ready to install
+  useEffect(() => {
+    if (readyToRestart) {
+      addReminder("success", cn ? "新版本已下载完成！请点击【立即升级】安装更新。" : "Update downloaded! Click [Upgrade Now] to install.");
+    }
+  }, [readyToRestart, cn, addReminder]);
+
+  // Notify when update check or download fails
+  useEffect(() => {
+    if (!updateError) return;
+    addReminder("error", cn ? `更新检查失败：${updateError}` : `Update check failed: ${updateError}`);
+  }, [updateError, cn, addReminder]);
 
   // Check Tauri availability on mount
   useEffect(() => {
@@ -789,174 +808,180 @@ export default function App() {
   return (
     <div className={`min-h-screen bg-[#FDFCFB] text-[#1C1C1C] font-sans flex flex-col transition duration-300 ${settings.theme === "dark" ? "dark:bg-[#121211] dark:text-[#F5F3EF]" : ""}`}>
 
-      {/* Global Header */}
-      <header className="bg-white text-[#1C1C1C] px-8 py-4 border-b border-[#E5E2DE] flex items-center justify-between shrink-0 dark:bg-[#191816] dark:border-[#3E3A35]">
-        <div className="flex items-center gap-3">
-          <div className="bg-black p-2 text-white dark:bg-white dark:text-black">
-            <Radio className="animate-pulse" size={16} />
+      {/* Global Header — two-row layout (brand bar + context toolbar) */}
+      <header className="bg-white text-[#1C1C1C] border-b border-[#E5E2DE] shrink-0 dark:bg-[#191816] dark:border-[#3E3A35]">
+        {/* Row 1: Brand + global account controls */}
+        <div className="flex items-center justify-between px-6 py-2.5">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="bg-black p-2 text-white shrink-0 dark:bg-white dark:text-black">
+              <Radio className="animate-pulse" size={16} />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-lg font-serif italic font-bold tracking-tight text-black dark:text-white">
+                Aether
+              </h1>
+              <p className="text-[10px] text-[#8C8882] font-mono tracking-widest uppercase font-bold hidden sm:block truncate">
+                {cn ? "全网采配与九维商业研判工作台" : "Multi-Platform Research & Decision Workstation"}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-serif italic font-bold tracking-tight flex items-center gap-2 text-black dark:text-white">
-              Aether
-              {selectedProject && (
-                <span className="hidden md:inline-flex bg-[#F9F8F6] text-[#1C1C1C] text-[9px] font-mono font-bold px-2 py-0.5 border border-[#E5E2DE] dark:bg-[#22201D] dark:text-[#F5F3EF] dark:border-[#3E3A35]">
-                  {selectedProject.name}
-                </span>
-              )}
-            </h1>
-            <p className="text-[10px] text-[#8C8882] font-mono tracking-widest uppercase font-bold hidden sm:block">
-              {cn ? "全网采配与九维商业研判工作台" : "Multi-Platform Research & Decision Workstation"}
-            </p>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setSettings(prev => ({ ...prev, language: prev.language === "zh" ? "en" : "zh" }))}
+              className="h-8 px-2.5 bg-white hover:bg-[#F9F8F6] text-[#5C5852] border border-[#E5E2DE] font-mono text-[11px] font-bold rounded-md cursor-pointer transition dark:bg-[#22201D] dark:text-[#8C8882] dark:border-[#3E3A35] dark:hover:bg-[#2A2724]"
+              title="Toggle language"
+            >
+              {cn ? "EN" : "中"}
+            </button>
+            <AccountPanel variant="header" cn={cn} onLoginClick={handleDesktopLogin} />
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {projects.length > 0 && (
-            <select
-              className="bg-white hover:bg-[#F9F8F6] text-[#1C1C1C] text-xs font-semibold py-1.5 px-3 border border-[#E5E2DE] focus:outline-none font-sans cursor-pointer dark:bg-[#22201D] dark:text-white dark:border-[#3E3A35]"
-              value={selectedProjectId}
-              onChange={(e) => { handleSelectProject(e.target.value); setCurrentTab("overview"); }}
-            >
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          )}
-
-          {readyToRestart ? (
-            <button
-              onClick={restartApp}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white p-1.5 border border-emerald-600 font-mono text-[10px] font-bold px-2 text-center cursor-pointer transition"
-              title={cn ? "更新已就绪，点击重启" : "Update ready, click to restart"}
-            >
-              {cn ? "重启更新" : "Restart"}
-            </button>
-          ) : updateDownloading ? (
-            <span className="bg-amber-50 text-amber-700 p-1.5 border border-amber-200 font-mono text-[10px] font-bold px-2 flex items-center gap-1">
-              <span className="animate-spin w-2.5 h-2.5 border-2 border-amber-700 border-t-transparent rounded-full inline-block" />
-              {updateProgress?.progress != null ? `${updateProgress.progress}%` : cn ? "下载中" : "DL"}
-            </span>
-          ) : updateChecking ? (
-            <span className="text-gray-400 font-mono text-[10px] px-1">
-              <span className="animate-spin w-2.5 h-2.5 border-2 border-gray-400 border-t-transparent rounded-full inline-block" />
-            </span>
-          ) : null}
-          <button
-            onClick={() => setSettings(prev => ({ ...prev, language: prev.language === "zh" ? "en" : "zh" }))}
-            className="bg-white hover:bg-[#F9F8F6] text-[#1C1C1C] p-1.5 border border-[#E5E2DE] font-mono text-xs font-bold w-12 text-center cursor-pointer transition dark:bg-[#22201D] dark:text-white dark:border-[#3E3A35]"
-            title="Toggle language"
-          >
-            {cn ? "EN" : "中"}
-          </button>
-
-          {isLoggedIn ? (
-            <div className="flex items-center gap-2 border-l border-[#E5E2DE] pl-3 dark:border-[#3E3A35]">
-              <span className="text-xs text-gray-500 font-medium hidden lg:inline">
-                {user?.username || user?.email}
+        {/* Row 2: Project context + workspace tools */}
+        <div className="flex items-center justify-between px-6 py-2 bg-[#FAFAF9] border-t border-[#E5E2DE]/70 gap-4 dark:bg-[#151413] dark:border-[#3E3A35]/70">
+          <div className="flex items-center gap-2 min-w-0">
+            {projects.length > 0 ? (
+              <select
+                className="h-8 bg-white hover:bg-[#F9F8F6] text-[#1C1C1C] text-xs font-semibold pl-3 pr-7 border border-[#E5E2DE] focus:outline-none font-sans cursor-pointer max-w-[16rem] truncate rounded-md dark:bg-[#22201D] dark:text-white dark:border-[#3E3A35]"
+                value={selectedProjectId}
+                onChange={(e) => { handleSelectProject(e.target.value); setCurrentTab("overview"); }}
+              >
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-[11px] text-[#8C8882] font-mono">
+                {cn ? "暂无研究项目" : "No projects yet"}
               </span>
-              <button
-                onClick={async () => {
-                  const token = getNexusClient().auth.getToken();
-                  const baseUrl = getWebsiteUrl();
-                  const url = token ? `${baseUrl}?token=${encodeURIComponent(token)}` : baseUrl;
-                  try {
-                    const { open } = await import('@tauri-apps/plugin-shell');
-                    await open(url);
-                  } catch {
-                    window.open(url, '_blank');
-                  }
-                }}
-                className="bg-transparent hover:bg-indigo-50 text-indigo-600 border border-indigo-200 hover:border-indigo-400 text-xs font-semibold py-1 px-2.5 rounded transition cursor-pointer dark:text-indigo-400 dark:border-indigo-900/60 dark:hover:bg-indigo-950/20"
-                title={cn ? "已登录: 点击一键同步并登录至网页端" : "Logged in: Click to sync and open website"}
-              >
-                {cn ? "前往网页版" : "Open Website"}
-              </button>
-              <button
-                onClick={logout}
-                className="text-xs text-rose-500 hover:text-rose-600 font-medium transition cursor-pointer pl-1"
-              >
-                登出
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={handleDesktopLogin}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-1.5 px-3 border border-indigo-600 rounded transition cursor-pointer"
-            >
-              登录 Nexus
-            </button>
-          )}
-
-          {/* FTS5 Search */}
-          <div className="relative">
-            <div className="flex items-center gap-1 bg-[#F9F8F6] border border-[#E5E2DE] rounded px-2 py-1 dark:bg-[#22201D] dark:border-[#3E3A35]">
-              <Search size={12} className="text-[#8C8882]" />
-              <input
-                type="text"
-                className="bg-transparent text-xs w-32 md:w-48 focus:outline-none dark:text-gray-200"
-                placeholder={cn ? "全文搜索证据..." : "Search documents..."}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={async (e) => {
-                  if (e.key === "Enter" && searchQuery.trim()) {
-                    setSearching(true);
-                    setShowSearch(true);
-                    try {
-                      const results = await invoke<[string, string, string][]>("search_documents", { query: searchQuery.trim() });
-                      setSearchResults(results.map(([title, content, platform]) => ({ title, content, platform })));
-                    } catch (_) { setSearchResults([]); }
-                    setSearching(false);
-                  }
-                }}
-              />
-              {searchQuery && (
-                <button onClick={() => { setSearchQuery(""); setShowSearch(false); }} className="text-[#8C8882] hover:text-red-500"><XIcon size={10} /></button>
-              )}
-            </div>
-            {showSearch && (
-              <div className="absolute top-full right-0 mt-2 w-96 max-h-80 overflow-y-auto bg-white border border-[#E5E2DE] rounded-lg shadow-xl z-50 dark:bg-[#191816] dark:border-[#3E3A35]">
-                <div className="p-3 border-b border-[#E5E2DE] flex items-center justify-between dark:border-[#3E3A35]">
-                  <span className="text-[10px] font-bold text-gray-500 font-mono uppercase">
-                    {searching ? (cn ? "搜索中..." : "Searching...") : `${searchResults.length} ${cn ? "条结果" : "results"}`}
-                  </span>
-                  <button onClick={() => setShowSearch(false)} className="text-gray-400 hover:text-red-500"><XIcon size={12} /></button>
-                </div>
-                {searchResults.length === 0 && !searching ? (
-                  <div className="p-6 text-center text-xs text-gray-400">{cn ? "未找到匹配结果" : "No matching results"}</div>
-                ) : (
-                  searchResults.map((r, i) => (
-                    <div key={i} className="p-3 border-b border-gray-50 hover:bg-slate-50 dark:border-[#3E3A35] dark:hover:bg-[#22201D]">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[9px] bg-slate-100 text-gray-500 font-mono px-1.5 py-0.5 rounded dark:bg-[#3E3A35]">{r.platform}</span>
-                        <span className="text-xs font-bold text-gray-800 dark:text-gray-200 line-clamp-1">{r.title}</span>
-                      </div>
-                      <p className="text-[10px] text-gray-500 line-clamp-2 leading-relaxed dark:text-gray-400">{r.content}</p>
-                    </div>
-                  ))
-                )}
-              </div>
             )}
           </div>
 
-          {/* System Reminders indicator */}
-          <button
-            onClick={() => setIsRightDrawerCollapsed(false)}
-            className="relative p-1.5 hover:bg-[#F9F8F6] transition cursor-pointer"
-            title={cn ? "系统提醒" : "System Reminders"}
-          >
-            <Bell size={16} className="text-[#5C5852]" />
-            {unreadReminders.length > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                {unreadReminders.length}
-              </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center h-8 rounded-md border border-[#E5E2DE] bg-white overflow-hidden dark:bg-[#22201D] dark:border-[#3E3A35]">
+              {/* Search */}
+              <div className="relative" ref={searchContainerRef}>
+                {!searchExpanded ? (
+                  <button
+                    onClick={() => setSearchExpanded(true)}
+                    className="h-8 w-8 flex items-center justify-center hover:bg-[#F9F8F6] transition cursor-pointer border-r border-[#E5E2DE] dark:hover:bg-[#2A2724] dark:border-[#3E3A35]"
+                    title={cn ? "全文搜索证据" : "Search documents"}
+                  >
+                    <Search size={15} className="text-[#5C5852]" />
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5 h-8 px-2 border-r border-[#E5E2DE] dark:border-[#3E3A35]">
+                    <Search size={13} className="text-[#8C8882] shrink-0" />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      className="bg-transparent text-xs w-32 sm:w-44 focus:outline-none dark:text-gray-200"
+                      placeholder={cn ? "搜索证据..." : "Search..."}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === "Enter" && searchQuery.trim()) {
+                          setSearching(true);
+                          setShowSearch(true);
+                          try {
+                            const results = await invoke<[string, string, string][]>("search_documents", { query: searchQuery.trim() });
+                            setSearchResults(results.map(([title, content, platform]) => ({ title, content, platform })));
+                          } catch (_) { setSearchResults([]); }
+                          setSearching(false);
+                        }
+                        if (e.key === "Escape") {
+                          setSearchQuery("");
+                          setShowSearch(false);
+                          setSearchExpanded(false);
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => { setSearchQuery(""); setShowSearch(false); setSearchExpanded(false); }}
+                      className="text-[#8C8882] hover:text-red-500 cursor-pointer"
+                    >
+                      <XIcon size={11} />
+                    </button>
+                  </div>
+                )}
+                {showSearch && (
+                  <div className="absolute top-full right-0 mt-2 w-96 max-h-80 overflow-y-auto bg-white border border-[#E5E2DE] rounded-lg shadow-xl z-50 dark:bg-[#191816] dark:border-[#3E3A35]">
+                    <div className="p-3 border-b border-[#E5E2DE] flex items-center justify-between dark:border-[#3E3A35]">
+                      <span className="text-[10px] font-bold text-gray-500 font-mono uppercase">
+                        {searching ? (cn ? "搜索中..." : "Searching...") : `${searchResults.length} ${cn ? "条结果" : "results"}`}
+                      </span>
+                      <button onClick={() => setShowSearch(false)} className="text-gray-400 hover:text-red-500 cursor-pointer"><XIcon size={12} /></button>
+                    </div>
+                    {searchResults.length === 0 && !searching ? (
+                      <div className="p-6 text-center text-xs text-gray-400">{cn ? "未找到匹配结果" : "No matching results"}</div>
+                    ) : (
+                      searchResults.map((r, i) => (
+                        <div key={i} className="p-3 border-b border-gray-50 hover:bg-slate-50 dark:border-[#3E3A35] dark:hover:bg-[#22201D]">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[9px] bg-slate-100 text-gray-500 font-mono px-1.5 py-0.5 rounded dark:bg-[#3E3A35]">{r.platform}</span>
+                            <span className="text-xs font-bold text-gray-800 dark:text-gray-200 line-clamp-1">{r.title}</span>
+                          </div>
+                          <p className="text-[10px] text-gray-500 line-clamp-2 leading-relaxed dark:text-gray-400">{r.content}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => setIsRightDrawerCollapsed(false)}
+                className="relative h-8 w-8 flex items-center justify-center hover:bg-[#F9F8F6] transition cursor-pointer border-r border-[#E5E2DE] dark:hover:bg-[#2A2724] dark:border-[#3E3A35]"
+                title={cn ? "系统提醒" : "System Reminders"}
+              >
+                <Bell size={15} className="text-[#5C5852]" />
+                {unreadReminders.length > 0 && (
+                  <span className="absolute top-1 right-1 bg-red-500 text-white text-[7px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                    {unreadReminders.length}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={() => setCurrentTab("settings")}
+                className={`relative h-8 w-8 flex items-center justify-center transition cursor-pointer ${
+                  currentTab === "settings"
+                    ? "bg-[#1C1C1C] text-white dark:bg-white dark:text-black"
+                    : "hover:bg-[#F9F8F6] text-[#5C5852] dark:hover:bg-[#2A2724]"
+                }`}
+                title={cn ? "设置中心" : "Settings"}
+              >
+                <Settings size={15} />
+                {readyToRestart && !updateChecking && !updateDownloading && !updateInstalling && (
+                  <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                )}
+                {(updateChecking || updateDownloading || updateInstalling) && (
+                  <span className="absolute top-1 right-1">
+                    <Loader2 size={8} className="animate-spin text-amber-500" />
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {(readyToRestart || updateInstalling) && (
+              <button
+                onClick={restartApp}
+                disabled={updateInstalling}
+                className="h-8 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white border border-emerald-600 font-mono text-[10px] font-bold px-3 rounded-md cursor-pointer transition shrink-0 flex items-center gap-1.5"
+                title={cn ? "安装更新并重启" : "Install update and restart"}
+              >
+                {updateInstalling && <Loader2 size={11} className="animate-spin" />}
+                {cn ? (updateInstalling ? "安装中" : "立即升级") : (updateInstalling ? "Installing" : "Upgrade")}
+              </button>
             )}
-          </button>
+          </div>
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left Sidebar Navigation */}
-        <nav className={`bg-[#F9F8F6] text-[#1C1C1C] border-r border-[#E5E2DE] flex flex-col justify-between transition-all duration-300 shrink-0 dark:bg-[#191816] dark:border-[#3E3A35] dark:text-[#F5F3EF] ${isSidebarCollapsed ? "w-16" : "w-60"}`}>
+        <nav className={`bg-[#F9F8F6] text-[#1C1C1C] border-r border-[#E5E2DE] flex flex-col transition-all duration-300 shrink-0 dark:bg-[#191816] dark:border-[#3E3A35] dark:text-[#F5F3EF] ${isSidebarCollapsed ? "w-16" : "w-60"}`}>
           <div className="flex-1 min-h-0 space-y-1.5 py-4 px-3 overflow-y-auto">
             <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#E5E2DE] px-1 text-[#8C8882] text-[10px] font-mono font-bold uppercase tracking-widest">
               <span>{!isSidebarCollapsed && (cn ? "工作流程" : "WORKFLOW")}</span>
@@ -978,7 +1003,6 @@ export default function App() {
               { id: "compare", label: cn ? "对比项目" : "Compare", icon: ArrowLeftRight },
               { id: "export", label: cn ? "报告导出" : "Export", icon: ReportIcon, needsProject: true },
               { id: "versions", label: cn ? "版本历史" : "Versions", icon: History, needsProject: true, isSnapshot: true },
-              { id: "settings", label: cn ? "设置中心" : "Settings", icon: Settings },
             ].map(menu => {
               const IconComp = menu.icon;
               const isActive = currentTab === menu.id;
@@ -1011,9 +1035,6 @@ export default function App() {
                 </button>
               );
             })}
-          </div>
-          <div className="mt-auto border-t border-[#E5E2DE] dark:border-[#3E3A35]">
-            <AccountPanel compact={isSidebarCollapsed} onLoginClick={handleDesktopLogin} />
           </div>
         </nav>
 
@@ -1272,7 +1293,21 @@ export default function App() {
           )}
 
           {currentTab === "settings" && (
-            <SettingView settings={settings} onUpdateSettings={setSettings} />
+            <SettingView
+              settings={settings}
+              onUpdateSettings={setSettings}
+              updateChecking={updateChecking}
+              updateDownloading={updateDownloading}
+              updateInstalling={updateInstalling}
+              updateProgress={updateProgress}
+              readyToRestart={readyToRestart}
+              updateAvailable={updateAvailable}
+              updateError={updateError}
+              remoteVersion={remoteVersion}
+              onCheckForUpdates={checkForUpdates}
+              onDownloadUpdate={downloadAvailableUpdate}
+              onRestartUpdate={restartApp}
+            />
           )}
         </main>
 

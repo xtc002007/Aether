@@ -123,7 +123,7 @@ Windows 平台的更新包直接使用 NSIS 安装包（`.exe`），url 指向 G
 
 ### 安全机制
 
-- **ed25519 签名**：私钥存储在 GitHub Secrets（`TAURI_SIGNING_PRIVATE_KEY`），公钥在构建时注入应用
+- **ed25519 签名**：私钥存储在 GitHub Secrets（`AETHER_SIGNING_PRIVATE_KEY`），公钥在构建时注入应用
 - **TLS 传输**：更新包通过 HTTPS 从 GitHub Releases 分发
 - **验签安装**：Tauri 框架在安装前验证签名完整性
 

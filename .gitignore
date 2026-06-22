@@ -8,5 +8,10 @@ coverage/
 !.env.example
 /data/
 
-# Tauri updater config (generated at build time, contains keys)
+# Per-tool updater signing keys (private + public)
+signing/*.key
+signing/*.key.pub
+!signing/README.md
+
+# Tauri updater config (generated at build time)
 tauri.updater.conf.json

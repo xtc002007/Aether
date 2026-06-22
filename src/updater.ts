@@ -19,8 +19,8 @@ export type NativeAppUpdate = {
   body?: string;
   currentVersion: string;
   date?: string;
-  downloadAndInstall: (callbacks?: { onProgress?: (progress: NativeAppUpdateProgress) => unknown }) => Promise<unknown>;
-  restart: () => Promise<unknown>;
+  download: (callbacks?: { onProgress?: (progress: NativeAppUpdateProgress) => unknown }) => Promise<unknown>;
+  installAndRestart: () => Promise<unknown>;
   version: string;
 };
 
@@ -28,8 +28,32 @@ function isTauriRuntime() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+async function resolveProxyCandidates() {
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+
+  const add = (proxy?: string | null) => {
+    const normalized = proxy?.trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    candidates.push(normalized);
+  };
+
+  if (isTauriRuntime()) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      add(await invoke<string | null>("get_system_proxy_url"));
+    } catch {
+      // System proxy lookup is optional.
+    }
+  }
+
+  for (const proxy of localUpdaterProxyUrls) add(proxy);
+  return candidates;
+}
+
 async function checkWithLocalProxyFallback() {
-  for (const proxy of localUpdaterProxyUrls) {
+  for (const proxy of await resolveProxyCandidates()) {
     try {
       return await check({ proxy });
     } catch {
@@ -60,6 +84,36 @@ function emitProgress({
   });
 }
 
+function trackDownloadProgress(
+  update: Awaited<ReturnType<typeof check>>,
+  callbacks: { onProgress?: (progress: NativeAppUpdateProgress) => unknown } = {}
+) {
+  if (!update) return Promise.resolve();
+
+  let contentLength: number | null = null;
+  let downloaded = 0;
+
+  return update.download((event: DownloadEvent) => {
+    if (event.event === "Started") {
+      contentLength = event.data.contentLength ?? null;
+      downloaded = 0;
+      emitProgress({ contentLength, downloaded, onProgress: callbacks.onProgress });
+      return;
+    }
+
+    if (event.event === "Progress") {
+      downloaded += event.data.chunkLength;
+      emitProgress({ contentLength, downloaded, onProgress: callbacks.onProgress });
+      return;
+    }
+
+    if (event.event === "Finished") {
+      if (contentLength !== null) downloaded = contentLength;
+      emitProgress({ contentLength, downloaded, onProgress: callbacks.onProgress });
+    }
+  });
+}
+
 export async function checkNativeAppUpdate(): Promise<NativeAppUpdate | null> {
   if (!isTauriRuntime()) return null;
 
@@ -70,31 +124,11 @@ export async function checkNativeAppUpdate(): Promise<NativeAppUpdate | null> {
     body: update.body,
     currentVersion: update.currentVersion,
     date: update.date,
-    async downloadAndInstall(callbacks = {}) {
-      let contentLength: number | null = null;
-      let downloaded = 0;
-
-      await update.downloadAndInstall((event: DownloadEvent) => {
-        if (event.event === "Started") {
-          contentLength = event.data.contentLength ?? null;
-          downloaded = 0;
-          emitProgress({ contentLength, downloaded, onProgress: callbacks.onProgress });
-          return;
-        }
-
-        if (event.event === "Progress") {
-          downloaded += event.data.chunkLength;
-          emitProgress({ contentLength, downloaded, onProgress: callbacks.onProgress });
-          return;
-        }
-
-        if (event.event === "Finished") {
-          if (contentLength !== null) downloaded = contentLength;
-          emitProgress({ contentLength, downloaded, onProgress: callbacks.onProgress });
-        }
-      });
+    download(callbacks = {}) {
+      return trackDownloadProgress(update, callbacks);
     },
-    async restart() {
+    async installAndRestart() {
+      await update.install();
       await relaunch();
     },
     version: update.version

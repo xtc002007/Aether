@@ -119,18 +119,18 @@ function useAutoUpdater(enabled = true, options = {}) {
 ### 5.1 生成密钥
 
 ```bash
-npx tauri signer generate -w ~/.tauri/aether.key --password "your-password"
+npx tauri signer generate -w signing/aether.key --password "your-password"
 ```
 
 输出两个文件：
-- `~/.tauri/aether.key` — 私钥（保密，绝不可提交到 git）
-- `~/.tauri/aether.key.pub` — 公钥（用于构建时注入应用）
+- `signing/aether.key` — 私钥（保密，绝不可提交到 git）
+- `signing/aether.key.pub` — 公钥（用于构建时注入应用）
 
 ### 5.2 密钥安全策略
 
 | 资产 | 存储位置 | 保护措施 |
 |------|----------|----------|
-| 私钥 | `%USERPROFILE%\.tauri\`（repo 外） | 不在工作目录内 |
+| 私钥 | `signing/aether.key`（项目内，gitignore） | 不在版本库中 |
 | 公钥 | `.env` 文件 + GitHub Secrets | `.env*` 在 `.gitignore` |
 | 密码 | `.env` 文件 | `.env*` 在 `.gitignore` |
 | 构建配置 | `tauri.updater.conf.json` | 构建脚本生成，`.gitignore` 排除 |
@@ -158,7 +158,7 @@ scripts/build-release.ps1
 ### 6.3 构建脚本内部流程
 
 ```
-加载 .env → 设置 TAURI_SIGNING_PRIVATE_KEY 环境变量
+加载 .env → 从 `AETHER_SIGNING_PRIVATE_KEY_PATH` 读取私钥 → 设置 `TAURI_SIGNING_PRIVATE_KEY` 供 Tauri CLI 签名
          → 生成 tauri.updater.conf.json
          → npx tauri build --config tauri.updater.conf.json
          → Tauri 输出:

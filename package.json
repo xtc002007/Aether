@@ -1,13 +1,17 @@
 {
   "name": "aether",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "prepare:updater": "node scripts/prepare-updater-config.mjs",
+    "tauri:dev": "node scripts/prepare-updater-config.mjs && tauri dev --config tauri.updater.conf.json",
+    "tauri:dev:release": "node scripts/prepare-updater-config.mjs && tauri dev --release --config tauri.updater.conf.json",
+    "test:updater": "node scripts/test-updater-check.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",

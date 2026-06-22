@@ -330,6 +330,7 @@ INSERT OR IGNORE INTO app_settings (key, value) VALUES
     ('global_max_concurrent', '8'),
     ('default_crawl_depth', 'quick'),
     ('auto_backup', 'true'),
+    ('auto_update_enabled', 'true'),
     ('save_html', 'false'),
     ('sqlite_path', './data/aether.db'),
     ('log_level', 'info');

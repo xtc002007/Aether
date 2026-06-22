@@ -58,6 +58,7 @@ fn main() {
             commands::analysis::re_evaluate,
             commands::analysis::resume_analysis,
             commands::config::get_settings,
+            commands::config::get_system_proxy_url,
             commands::config::update_settings,
             commands::config::get_platform_configs,
             commands::config::update_platform_config,

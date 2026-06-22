@@ -13,24 +13,32 @@ npm install
 ### 1.2 生成签名密钥（仅首次）
 
 ```bash
-npx tauri signer generate -w "%USERPROFILE%\.tauri\aether.key"
-# 按提示输入密码（本项目密码：xtcxtc0328021）
+npx tauri signer generate -w "signing/aether.key"
+# 按提示设置私钥密码，并妥善保存（勿写入文档或提交到 git）
 ```
 
-密钥位置：
-- 私钥：`%USERPROFILE%\.tauri\aether.key`  ← **严禁提交到 git**
-- 公钥：`%USERPROFILE%\.tauri\aether.key.pub`
+密钥位置（项目内，已 gitignore）：
+- 私钥：`signing/aether.key`
+- 公钥：`signing/aether.key.pub`
+
+从旧路径 `%USERPROFILE%\.tauri\` 迁移：
+
+```powershell
+scripts\migrate-signing.ps1
+```
 
 ### 1.3 配置 .env 文件
 
-项目根目录 `.env`（已 gitignored，复制 `.env.example` 或直接创建）：
+项目根目录 `.env`（已 gitignored）：
 
 ```env
-TAURI_SIGNING_PRIVATE_KEY_PATH=%USERPROFILE%\.tauri\aether.key
-TAURI_SIGNING_PRIVATE_KEY_PASSWORD=xtcxtc0328021
-TAURI_UPDATER_PUBLIC_KEY=<从 aether.key.pub 复制的内容>
-TAURI_UPDATER_ENDPOINT=https://github.com/xtc002007/Aether/releases/latest/download/latest.json
+AETHER_SIGNING_PRIVATE_KEY_PATH=signing/aether.key
+AETHER_SIGNING_PUBLIC_KEY_PATH=signing/aether.key.pub
+AETHER_SIGNING_PRIVATE_KEY_PASSWORD=<your-signing-password>
+AETHER_UPDATER_ENDPOINT=https://github.com/xtc002007/Aether/releases/latest/download/latest.json
 ```
+
+公钥可省略 `AETHER_UPDATER_PUBLIC_KEY`，构建脚本会自动读取 `signing/aether.key.pub`。
 
 ---
 
@@ -62,9 +70,11 @@ scripts\build-release.ps1
 
 | Secret | 值来源 |
 |--------|--------|
-| `TAURI_SIGNING_PRIVATE_KEY` | `Get-Content "$env:USERPROFILE\.tauri\aether.key" -Raw` |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 私钥密码 |
-| `TAURI_UPDATER_PUBLIC_KEY` | `Get-Content "$env:USERPROFILE\.tauri\aether.key.pub" -Raw` |
+| `AETHER_SIGNING_PRIVATE_KEY` | `Get-Content "signing/aether.key" -Raw` |
+| `AETHER_SIGNING_PRIVATE_KEY_PASSWORD` | 生成私钥时设置的密码（仅保存在 GitHub Secrets） |
+| `AETHER_UPDATER_PUBLIC_KEY` | `Get-Content "signing/aether.key.pub" -Raw` |
+
+> 若仍使用旧名称 `TAURI_SIGNING_*`，请在 GitHub 中重命名为 `AETHER_*` 前缀。
 
 ### 3.2 触发发布
 
@@ -117,7 +127,8 @@ git tag v0.x.x && git push origin main --tags
 
 ## 5. 注意事项
 
-- **密钥安全**：私钥文件在 repo 外，`.env` 在 `.gitignore` 中，绝不可提交
-- **CI 失败排查**：先检查 Secrets 是否完整配置
+- **密钥安全**：`signing/*.key` 在 `.gitignore` 中，绝不可提交
+- **多工具扩展**：每个工具项目使用 `signing/<app-slug>.key` 与 `AETHER_*` 环境变量前缀
+- **CI 失败排查**：先检查 `AETHER_*` Secrets 是否完整配置
 - **端口冲突**：本地 dev 端口 19924，与构建无关
 - **更新测试**：发布后可在应用设置中点击"检查更新"手动触发
