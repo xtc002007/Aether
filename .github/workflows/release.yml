@@ -126,9 +126,11 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           rm -rf node_modules/nexustools-sdk
-          mkdir -p node_modules/nexustools-sdk
-          cp -r ../NexusTools-shared/nexustools-sdk/dist node_modules/nexustools-sdk/
-          cp ../NexusTools-shared/nexustools-sdk/package.json node_modules/nexustools-sdk/
+          cp -r ../NexusTools-shared/nexustools-sdk node_modules/nexustools-sdk
+          cd node_modules/nexustools-sdk
+          npm install --no-audit --no-fund
+          npm run build
+          node -e "import('./dist/index.js').then(m=>{if(typeof m.setDeviceIdProvider!=='function')throw new Error('SDK missing setDeviceIdProvider — push latest NexusTools-shared');console.log('SDK exports OK')})"
 
       - name: Prepare updater config
         shell: bash
