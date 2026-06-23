@@ -12,6 +12,14 @@ on:
         required: false
         default: false
         type: boolean
+      build_flavor:
+        description: "direct = NSIS + Tauri updater; store = MSIX for Microsoft Store (disables updater)"
+        required: false
+        default: direct
+        type: choice
+        options:
+          - direct
+          - store
   push:
     tags:
       - "v*"
@@ -28,8 +36,10 @@ env:
   APP_PRODUCT_NAME: Aether
   DESKTOP_DIR: .
   NODE_VERSION: 22
+  NEXUSTOOLS_API_URL: https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev
+  BUILD_FLAVOR: ${{ github.event_name == 'workflow_dispatch' && inputs.build_flavor || 'direct' }}
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
-  AETHER_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
+  AETHER_UPDATER_ENDPOINT: https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev/api/apps/aether/updates/latest?platform=windows-x64
 
 jobs:
   build:
@@ -125,12 +135,25 @@ jobs:
         env:
           AETHER_SIGNING_PRIVATE_KEY: ${{ secrets.AETHER_SIGNING_PRIVATE_KEY }}
           AETHER_UPDATER_PUBLIC_KEY: ${{ secrets.AETHER_UPDATER_PUBLIC_KEY }}
+          BUILD_FLAVOR: ${{ env.BUILD_FLAVOR }}
         run: |
           set -euo pipefail
 
           node <<'NODE'
           const fs = require("fs");
-          const path = require("path");
+          const flavor = process.env.BUILD_FLAVOR || "direct";
+
+          if (flavor === "store") {
+            const storeConfig = {
+              bundle: {
+                createUpdaterArtifacts: false,
+                targets: ["msi"],
+              },
+            };
+            fs.writeFileSync("tauri.store.conf.json", `${JSON.stringify(storeConfig, null, 2)}\n`);
+            console.log("Store flavor: updater disabled, MSI-only bundle.");
+            process.exit(0);
+          }
 
           const endpoint = process.env.AETHER_UPDATER_ENDPOINT;
           const privateKey = process.env.AETHER_SIGNING_PRIVATE_KEY?.trim();
@@ -145,7 +168,8 @@ jobs:
 
           const updaterConfig = {
             bundle: {
-              createUpdaterArtifacts: true
+              createUpdaterArtifacts: true,
+              targets: ["nsis"],
             },
             plugins: {
               updater: {
@@ -167,10 +191,16 @@ jobs:
         env:
           ASSET_PLATFORM: windows
           RELEASE_TAG: ${{ env.RELEASE_TAG }}
+          BUILD_FLAVOR: ${{ env.BUILD_FLAVOR }}
           TAURI_BUILD_ARGS: --target x86_64-pc-windows-msvc
         run: |
           set -euo pipefail
           tauri_args="$(node .release-scripts/scripts/release/resolve-tauri-build-args.mjs)"
+          if [[ "${BUILD_FLAVOR}" == "store" ]]; then
+            tauri_args="${tauri_args} --config tauri.store.conf.json"
+          else
+            tauri_args="${tauri_args} --config tauri.updater.conf.json"
+          fi
           echo "args=${tauri_args}" >> "${GITHUB_OUTPUT}"
 
       - name: Build and bundle app
@@ -182,7 +212,7 @@ jobs:
           VITE_NEXUSTOOLS_API_URL: https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev
           VITE_NEXUSTOOLS_WEBSITE_URL: https://nexustools.tech
         with:
-          args: ${{ steps.tauri_args.outputs.args }} --config tauri.updater.conf.json
+          args: ${{ steps.tauri_args.outputs.args }}
 
       - name: Normalize release asset names
         shell: bash
@@ -279,6 +309,7 @@ jobs:
           NODE
 
       - name: Create updater metadata
+        if: env.BUILD_FLAVOR == 'direct'
         shell: bash
         env:
           ARTIFACT_PATHS_RAW: ${{ steps.bundle_paths.outputs.paths }}
@@ -362,6 +393,7 @@ jobs:
           path: release-assets
 
       - name: Generate updater manifest
+        if: env.BUILD_FLAVOR == 'direct'
         env:
           EXPECTED_UPDATER_PLATFORMS: windows-x86_64
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -372,6 +404,17 @@ jobs:
           set -euo pipefail
           export RELEASE_VERSION="${RELEASE_VERSION#v}"
           node .release-scripts/scripts/release/generate-updater-manifest.mjs
+
+      - name: Sync updater manifest to NexusTools API
+        if: env.BUILD_FLAVOR == 'direct'
+        env:
+          NEXUSTOOLS_API_URL: ${{ env.NEXUSTOOLS_API_URL }}
+          NEXUSTOOLS_CONFIG_KEY: ${{ secrets.NEXUSTOOLS_CONFIG_KEY }}
+          APP_ID: ${{ env.APP_SLUG }}
+          MANIFEST_PATH: release-assets/latest.json
+        run: |
+          set -euo pipefail
+          node .release-scripts/scripts/release/sync-updater-manifest.mjs
 
       - name: Collect release files
         id: release_files

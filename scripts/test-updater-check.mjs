@@ -204,8 +204,10 @@ async function fetchManifestWithFallback(endpoint) {
 const offlinePath = process.argv[2];
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const localVersion = packageJson.version;
-const endpoint = readEnv("AETHER_UPDATER_ENDPOINT") ?? readEnv("TAURI_UPDATER_ENDPOINT");
-  ?? "https://github.com/xtc002007/Aether/releases/latest/download/latest.json";
+const apiUrl = readEnv("VITE_NEXUSTOOLS_API_URL") || "https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev";
+const endpoint = readEnv("AETHER_UPDATER_ENDPOINT")
+  ?? readEnv("TAURI_UPDATER_ENDPOINT")
+  ?? `${apiUrl}/api/apps/aether/updates/latest?platform=windows-x64`;
 
 console.log(`[updater-test] Local version : ${localVersion}`);
 console.log(`[updater-test] Endpoint      : ${endpoint}`);

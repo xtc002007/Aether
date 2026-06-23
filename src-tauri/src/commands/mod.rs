@@ -7,6 +7,7 @@ pub mod config;
 pub mod snapshot;
 pub mod export;
 pub mod modeling;
+pub mod device;
 
 use crate::db::Database;
 use crate::scheduler::Scheduler;

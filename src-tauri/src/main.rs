@@ -86,6 +86,8 @@ fn main() {
             commands::analysis::search_documents,
             commands::project::get_stats,
             commands::project::get_competitor_evidence,
+            commands::device::get_machine_fingerprint,
+            commands::device::get_os_info,
         ])
         .run(tauri::generate_context!())
         .expect("Failed to launch Aether application");

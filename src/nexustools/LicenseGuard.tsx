@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNexusAuth } from './useNexusAuth';
+import { getNexusClient } from './client';
 import { PurchasePrompt } from './PurchasePrompt';
 import { Key } from 'lucide-react';
 
@@ -10,10 +11,20 @@ interface LicenseGuardProps {
 }
 
 export function LicenseGuard({ featureId, children, fallback }: LicenseGuardProps) {
-  const { licenseStatus, loading, isLoggedIn } = useNexusAuth();
+  const { fullStatus, loading, isLoggedIn } = useNexusAuth();
   const [purchaseOpen, setPurchaseOpen] = React.useState(false);
+  const [canUse, setCanUse] = React.useState<boolean | null>(null);
 
-  if (loading) {
+  React.useEffect(() => {
+    if (loading) return;
+    let active = true;
+    getNexusClient().licenses.canUseFeature(featureId).then((allowed) => {
+      if (active) setCanUse(allowed);
+    });
+    return () => { active = false; };
+  }, [featureId, loading, fullStatus]);
+
+  if (loading || canUse === null) {
     return (
       <div className="flex h-32 items-center justify-center text-slate-400">
         正在验证功能授权...
@@ -21,9 +32,17 @@ export function LicenseGuard({ featureId, children, fallback }: LicenseGuardProp
     );
   }
 
-  const isUnlocked = licenseStatus?.hasLicense && licenseStatus.unlockedFeatures.includes(featureId);
+  const needsActivation = isLoggedIn && fullStatus && !fullStatus.activation.valid;
 
-  if (isUnlocked) {
+  if (needsActivation) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-amber-500/20 bg-amber-500/5 p-8 text-center">
+        <p className="text-sm text-amber-200">请先完成网站激活后再使用此功能</p>
+      </div>
+    );
+  }
+
+  if (canUse) {
     return <>{children}</>;
   }
 
@@ -41,14 +60,14 @@ export function LicenseGuard({ featureId, children, fallback }: LicenseGuardProp
       </h3>
       <p className="text-sm text-slate-400 max-w-sm mb-5">
         {!isLoggedIn
-          ? '请先登录您的 NexusTools 账号以验证或同步专业版购买状态'
-          : '您的账户目前为免费限制版，升级至 Aether Pro 即可解锁此功能'}
+          ? '请先登录您的 NexusTools 账号，或订阅 Pro 解锁此功能'
+          : '订阅 Aether Pro 即可解锁此功能'}
       </p>
       <button
         onClick={() => setPurchaseOpen(true)}
         className="rounded-lg bg-indigo-600 hover:bg-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition shadow-lg shadow-indigo-600/15"
       >
-        {!isLoggedIn ? '购买或登录激活 Pro 版' : '升级至 Pro 专业版'}
+        {!isLoggedIn ? '登录或订阅 Pro' : '订阅 Pro 专业版'}
       </button>
 
       <PurchasePrompt isOpen={purchaseOpen} onClose={() => setPurchaseOpen(false)} />

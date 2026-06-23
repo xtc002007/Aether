@@ -13,7 +13,7 @@ interface AccountPanelProps {
 }
 
 export function AccountPanel({ compact = false, variant = 'sidebar', cn = true, onLoginClick }: AccountPanelProps) {
-  const { user, isLoggedIn, licenseStatus, loading, logout } = useNexusAuth();
+  const { user, isLoggedIn, licenseStatus, fullStatus, loading, logout } = useNexusAuth();
   const [authOpen, setAuthOpen] = useState(false);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
 
@@ -99,7 +99,7 @@ export function AccountPanel({ compact = false, variant = 'sidebar', cn = true, 
             {licenseStatus?.hasLicense ? (
               <div className="px-3 py-2 flex items-center gap-1.5 text-[10px] text-emerald-600 dark:text-emerald-400">
                 <ShieldCheck className="h-3 w-3" />
-                <span>{licenseStatus.license?.planType === 'lifetime' ? (cn ? '永久授权' : 'Lifetime') : (cn ? '订阅版' : 'Subscription')} · {cn ? '已激活' : 'Active'}</span>
+                <span>{licenseStatus?.hasLicense ? (cn ? '订阅版' : 'Subscription') : (cn ? '免费版' : 'Free')} · {fullStatus?.activation.valid ? (cn ? '已激活' : 'Active') : (cn ? '待激活' : 'Pending')}</span>
               </div>
             ) : (
               <button
@@ -212,7 +212,7 @@ export function AccountPanel({ compact = false, variant = 'sidebar', cn = true, 
               <div className="flex items-center space-x-2 text-xs text-emerald-400">
                 <ShieldCheck className="h-3.5 w-3.5" />
                 <span className="font-medium">
-                  {licenseStatus.license?.planType === 'lifetime' ? '永久授权' : '订阅版授权'} · 已激活
+                  {licenseStatus?.hasLicense ? '订阅版授权' : '免费版'} · {fullStatus?.activation.valid ? '已激活' : '待激活'}
                 </span>
               </div>
             ) : (

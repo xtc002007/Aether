@@ -21,6 +21,9 @@ import PlatformConfigView from "./components/PlatformConfigView";
 import CompareView from "./components/CompareView";
 import SnapshotManager from "./components/SnapshotManager";
 import { AccountPanel } from "./nexustools/AccountPanel";
+import { ActivationGuard } from "./nexustools/ActivationGuard";
+import { ActivationReminderBanner } from "./nexustools/ActivationReminderBanner";
+import { AnonymousBanner } from "./nexustools/AnonymousBanner";
 import { useNexusAuth } from "./nexustools/useNexusAuth";
 import { AuthModal } from "./nexustools/AuthModal";
 import { getWebsiteUrl } from "./nexustools/client";
@@ -1040,6 +1043,9 @@ export default function App() {
 
         {/* Main Workspace */}
         <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 bg-[#FDFCFB] dark:bg-[#121211]">
+          <AnonymousBanner onLoginClick={() => setAuthOpen(true)} />
+          <ActivationReminderBanner />
+          <ActivationGuard>
 
           {connectionError && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
@@ -1309,6 +1315,7 @@ export default function App() {
               onRestartUpdate={restartApp}
             />
           )}
+          </ActivationGuard>
         </main>
 
         {/* Right Context Drawer */}

@@ -58,7 +58,12 @@ export function readFileIfExists(filePath) {
 }
 
 export function loadAetherUpdaterConfig() {
-  const endpoint = readEnvWithLegacy("AETHER_UPDATER_ENDPOINT");
+  const apiUrl =
+    readEnv('VITE_NEXUSTOOLS_API_URL') ||
+    readEnv('NEXUSTOOLS_API_URL') ||
+    'https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev';
+  const defaultEndpoint = `${apiUrl}/api/apps/aether/updates/latest?platform=windows-x64`;
+  const endpoint = readEnvWithLegacy("AETHER_UPDATER_ENDPOINT") || defaultEndpoint;
   const privateKeyPath = resolveProjectPath(
     readEnvWithLegacy("AETHER_SIGNING_PRIVATE_KEY_PATH") || DEFAULT_PRIVATE_KEY_PATH,
   );
