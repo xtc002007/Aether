@@ -25,7 +25,6 @@ import { ActivationGuard } from "./nexustools/ActivationGuard";
 import { ActivationReminderBanner } from "./nexustools/ActivationReminderBanner";
 import { AnonymousBanner } from "./nexustools/AnonymousBanner";
 import { useNexusAuth } from "./nexustools/useNexusAuth";
-import { AuthModal } from "./nexustools/AuthModal";
 import { getWebsiteUrl } from "./nexustools/client";
 
 import {
@@ -38,52 +37,7 @@ import {
 
 export default function App() {
   const { loginWithToken } = useNexusAuth();
-  const [authOpen, setAuthOpen] = useState(false);
-
-  const handleDesktopLogin = async () => {
-    const sessionId = 'session_' + Math.random().toString(36).substring(2, 11);
-    const baseUrl = getWebsiteUrl();
-    const loginUrl = `${baseUrl}/?session_id=${sessionId}`;
-
-    try {
-      const { open } = await import('@tauri-apps/plugin-shell');
-      await open(loginUrl);
-    } catch (e) {
-      console.warn("[Aether Auth] Failed to open via Tauri shell, falling back to window.open", e);
-      window.open(loginUrl, '_blank');
-    }
-
-    const syncApiUrl = import.meta.env.VITE_NEXUSTOOLS_API_URL || 'https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev';
-    const pollUrl = `${syncApiUrl}/api/auth/desktop-token?sessionId=${sessionId}`;
-
-    let pollCount = 0;
-    const pollInterval = setInterval(async () => {
-      pollCount++;
-      try {
-        const response = await fetch(pollUrl);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.token) {
-            clearInterval(pollInterval);
-            await loginWithToken(data.token);
-            addReminder("success", cn ? "同步成功，已成功登录 Nexus 账号！" : "Sync successful, logged in to Nexus!");
-            try {
-              const { getCurrentWindow } = await import('@tauri-apps/api/window');
-              await getCurrentWindow().setFocus();
-            } catch (err) {
-              console.error("[Aether Auth] Failed to focus window:", err);
-            }
-          }
-        }
-      } catch (err) {
-        console.error(`[Aether Auth] Failed to poll desktop token (attempt #${pollCount}):`, err);
-      }
-    }, 2000);
-
-    setTimeout(() => {
-      clearInterval(pollInterval);
-    }, 300000);
-  };
+  const desktopPollRef = useRef<{ sessionId: string; interval: ReturnType<typeof setInterval> } | null>(null);
 
   const [projects, setProjects] = useState<ResearchProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
@@ -133,6 +87,70 @@ export default function App() {
     }, 8000);
   }, []);
 
+  const clearDesktopLoginPoll = useCallback(() => {
+    if (desktopPollRef.current) {
+      clearInterval(desktopPollRef.current.interval);
+      desktopPollRef.current = null;
+    }
+  }, []);
+
+  const finishDesktopLogin = useCallback(async (token: string) => {
+    clearDesktopLoginPoll();
+    const result = await loginWithToken(token);
+    if (result?.success) {
+      addReminder("success", cn ? "同步成功，已成功登录 Nexus 账号！" : "Sync successful, logged in to Nexus!");
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        await getCurrentWindow().setFocus();
+      } catch (err) {
+        console.error("[Aether Auth] Failed to focus window:", err);
+      }
+    } else {
+      addReminder("error", cn ? "登录同步失败，请重试。" : "Login sync failed, please try again.");
+    }
+  }, [loginWithToken, cn, addReminder, clearDesktopLoginPoll]);
+
+  const handleDesktopLogin = useCallback(async () => {
+    clearDesktopLoginPoll();
+    const sessionId = 'session_' + Math.random().toString(36).substring(2, 11);
+    const baseUrl = getWebsiteUrl();
+    const loginUrl = `${baseUrl}/?session_id=${encodeURIComponent(sessionId)}`;
+
+    try {
+      const { open } = await import('@tauri-apps/plugin-shell');
+      await open(loginUrl);
+    } catch (e) {
+      console.warn("[Aether Auth] Failed to open via Tauri shell, falling back to window.open", e);
+      window.open(loginUrl, '_blank');
+    }
+
+    const syncApiUrl = import.meta.env.VITE_NEXUSTOOLS_API_URL || 'https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev';
+    const pollUrl = `${syncApiUrl}/api/auth/desktop-token?sessionId=${encodeURIComponent(sessionId)}`;
+
+    let pollCount = 0;
+    const pollInterval = setInterval(async () => {
+      pollCount++;
+      try {
+        const response = await fetch(pollUrl);
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.token) {
+          await finishDesktopLogin(data.token);
+        }
+      } catch (err) {
+        console.error(`[Aether Auth] Failed to poll desktop token (attempt #${pollCount}):`, err);
+      }
+    }, 2000);
+
+    desktopPollRef.current = { sessionId, interval: pollInterval };
+
+    setTimeout(() => {
+      if (desktopPollRef.current?.sessionId === sessionId) {
+        clearDesktopLoginPoll();
+      }
+    }, 300000);
+  }, [clearDesktopLoginPoll, finishDesktopLogin]);
+
   const dismissReminder = (id: string) => {
     setReminders(prev => prev.map(r => r.id === id ? { ...r, dismissed: true } : r));
   };
@@ -168,9 +186,7 @@ export default function App() {
             try {
               const match = urlArg.match(/[?&]token=([^&]+)/);
               if (match && match[1]) {
-                const token = decodeURIComponent(match[1]);
-                await loginWithToken(token);
-                addReminder("success", cn ? "同步成功，已成功登录 Nexus 账号！" : "Sync successful, logged in to Nexus!");
+                await finishDesktopLogin(decodeURIComponent(match[1]));
               }
             } catch (e) {
               console.error("[Aether Deeplink] Parse error:", e);
@@ -195,7 +211,7 @@ export default function App() {
         unlisten();
       }
     };
-  }, [loginWithToken, cn, addReminder]);
+  }, [finishDesktopLogin]);
 
   // Notify when update is ready to install
   useEffect(() => {
@@ -1043,7 +1059,7 @@ export default function App() {
 
         {/* Main Workspace */}
         <main className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 bg-[#FDFCFB] dark:bg-[#121211]">
-          <AnonymousBanner onLoginClick={() => setAuthOpen(true)} />
+          <AnonymousBanner />
           <ActivationReminderBanner />
           <ActivationGuard>
 
@@ -1399,7 +1415,6 @@ export default function App() {
           onRestoreComplete={handleRestoreFromSnapshot}
         />
       )}
-      <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} />
     </div>
   );
 }
