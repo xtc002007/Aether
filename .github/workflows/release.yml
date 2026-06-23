@@ -130,7 +130,10 @@ jobs:
           cd node_modules/nexustools-sdk
           npm install --no-audit --no-fund
           npm run build
-          node -e "import('./dist/index.js').then(m=>{if(typeof m.setDeviceIdProvider!=='function')throw new Error('SDK missing setDeviceIdProvider — push latest NexusTools-shared');console.log('SDK exports OK')})"
+          test -f dist/device.js || (echo "SDK missing dist/device.js — push latest NexusTools-shared" && exit 1)
+          grep -q 'setDeviceIdProvider' dist/index.js || (echo "SDK missing setDeviceIdProvider export" && exit 1)
+          grep -q 'createTauriDeviceIdProvider' dist/device.js || (echo "SDK missing createTauriDeviceIdProvider export" && exit 1)
+          echo "SDK exports OK"
 
       - name: Prepare updater config
         shell: bash
