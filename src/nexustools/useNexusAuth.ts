@@ -88,8 +88,8 @@ export function useNexusAuth() {
     setFullStatus(null);
   };
 
-  const createCheckout = async (variantId: number) => {
-    return await getNexusClient().orders.createCheckout(variantId);
+  const createCheckout = async (priceId: string, discountCode?: string, planId?: string) => {
+    return await getNexusClient().orders.createCheckout(priceId, discountCode, planId);
   };
 
   const loginWithToken = async (token: string) => {

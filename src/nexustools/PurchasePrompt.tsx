@@ -13,7 +13,7 @@ interface PricingPlan {
   type: string;
   price: number;
   name?: { zh: string; en: string };
-  lemonSqueezyVariantId?: number;
+  paddlePriceId?: string;
   isPopular?: boolean;
 }
 
@@ -73,9 +73,9 @@ export function PurchasePrompt({ isOpen, onClose }: PurchasePromptProps) {
 
   if (!isOpen) return null;
 
-  const handlePurchase = async (variantId: number) => {
+  const handlePurchase = async (plan: PricingPlan) => {
     try {
-      const res = await createCheckout(variantId);
+      const res = await createCheckout(plan.paddlePriceId || '', undefined, plan.id);
       if (res.local) {
         await refreshStatus();
         onClose();
@@ -151,8 +151,8 @@ export function PurchasePrompt({ isOpen, onClose }: PurchasePromptProps) {
                 </span>
               </div>
               <button
-                onClick={() => handlePurchase(plan.lemonSqueezyVariantId || 0)}
-                disabled={!plan.lemonSqueezyVariantId || verifying}
+                onClick={() => handlePurchase(plan)}
+                disabled={(!plan.paddlePriceId && !import.meta.env.DEV) || verifying}
                 className="w-full mt-3 rounded-lg bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 transition disabled:opacity-50"
               >
                 订阅 {plan.name?.zh || plan.id}
