@@ -1,88 +1,122 @@
-# Aether - 产品想法调研与决策系统
+# Aether
 
-**全网产品想法情报与决策系统** — 帮助创业者和产品经理在投入开发前，通过多平台数据采集和分析，科学判断产品想法的市场价值和切入策略。
+> **Market Intelligence, Competitive Auditing & Product Strategy Decision Engine.**
 
-## 技术架构
+[![GitHub Release](https://img.shields.io/github/v/release/xtc002007/Aether?style=flat-square&color=indigo)](https://github.com/xtc002007/Aether/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%20x64-blue.svg?style=flat-square)](https://nexustools.tech)
+[![Engine](https://img.shields.io/badge/backend-Rust%20%7C%20Tokio%20Async-orange.svg?style=flat-square)](https://tokio.rs)
+[![UI](https://img.shields.io/badge/frontend-React%20%7C%20Tailwind-61dafb.svg?style=flat-square)](https://react.dev)
+[![License](https://img.shields.io/badge/license-Proprietary-lightgrey.svg?style=flat-square)](./LICENSE)
 
-- **桌面壳**: Tauri v2
-- **前端**: React + TypeScript + Vite + Tailwind CSS
-- **后端**: Rust (Tokio async runtime)
-- **数据库**: SQLite (bundled, WAL mode, FTS5)
-- **并行调度**: Tokio + Semaphore-based rate limiting
+---
 
-## 核心功能
+## 📌 Overview
 
-1. **想法建模**: 将模糊想法标准化为可研究对象
-2. **多平台采集**: Google、Reddit、G2、App Store 等 8 类数据源
-3. **竞品识别**: 结构化竞品卡片 + 分类树
-4. **用户声音挖掘**: 情绪判断、主题聚类、差评分析
-5. **信号抽取**: 10 种信号类型（需求/痛点/替代/竞品/满意/不满/改进/付费/趋势/风险）
-6. **九维评估**: 需求强度、痛点强度、市场拥挤度、差异化空间等
-7. **策略生成**: 5 种切入策略（蓝海验证/差评切入/细分人群/体验重构/暂缓进入）
-8. **验证计划**: 访谈、落地页、投放测试等行动计划
+**Aether** is an intelligent, desktop-first market research and product validation workstation engineered for startup founders, indie hackers, product leaders, and venture analysts. Before writing a single line of application code or deploying capital, Aether crawls, filters, and analyzes organic customer discussions and competitor signals across the web—transforming unstructured market noise into structured, data-driven go-to-market strategies.
 
-## 开发运行
+Engineered with **Tauri v2 + React + Rust (Tokio Async Runtime) + Local SQLite (FTS5)**, Aether ensures your confidential product ideas and market hypotheses remain completely private on your local machine.
 
-### 前置条件
+---
 
-- Rust 1.70+
-- Node.js 18+
-- Tauri CLI: `cargo install tauri-cli`
+## ⚡ Key Highlights & Core Capabilities
 
-### 启动开发模式
+### 1. Formal Product Idea Modeling
+- **Hypothesis Standardization**: Deconstructs raw product concepts into testable problem-solution pairs, target personas, core value propositions, and monetization assumptions.
+- **Dynamic Research Scope**: Automatically generates targeted multi-lingual search queries and domain-specific boolean crawlers.
 
-```bash
-npm install
-npm run tauri dev
+### 2. Multi-Channel Intelligence Harvesting (8 High-Signal Platforms)
+- **Search Engines**: Google Search SERP analysis and organic result scraping.
+- **Community Forums**: Reddit discussion extraction across specialized subreddits.
+- **Enterprise Software Reviews**: G2 and Capterra review mining with negative review filtering.
+- **App Store & Marketplaces**: Apple App Store (iTunes API) and Google Play user feedback analysis.
+- **Ecosystem Curations**: Product Hunt, Twitter/X, and AlternativeTo product listings and category mapping.
+
+### 3. Competitor Landscape & Feature Matrix Auditing
+- **Automated Competitor Profiling**: Extracts incumbent feature sets, pricing models, positioning angles, and target customer profiles.
+- **Feature Gap Identification**: Uncovers unmet demands, abandoned features, and recurring customer complaints with incumbent tools.
+
+### 4. Voice-of-Customer Sentiment Mining & Signal Extraction
+- **10 Core Signal Extractors**: Automatically categorizes customer commentary into structured signals:
+  1. *Unmet Demand & Inquiries*
+  2. *Severe Customer Pain Points*
+  3. *Workarounds & Substitute Hacks*
+  4. *Direct Competitor Comparisons*
+  5. *Delight Drivers & Strengths*
+  6. *Frustration Drivers & Churn Triggers*
+  7. *Feature Requests & Improvements*
+  8. *Willingness-to-Pay & Pricing Sensitivity*
+  9. *Emerging Market Trends*
+  10. *Platform & Regulatory Risks*
+
+### 5. Nine-Dimensional Evaluation Matrix
+- **Objective Market Scoring**: Evaluates each idea across 9 quantitative and qualitative dimensions:
+  - *Demand Urgency*
+  - *Pain Point Severity*
+  - *Market Crowdedness / Incumbent Density*
+  - *Differentiation Headroom*
+  - *Technical Feasibility*
+  - *Willingness-to-Pay Probability*
+  - *Distribution & Go-To-Market Friction*
+  - *Platform Dependency Risk*
+  - *Long-Term Defensibility / Moat*
+
+### 6. Five Strategic Entry Pathways
+- **Automated Strategy Formulation**: Synthesizes market signals into one of five tactical launch recommendations:
+  - **Blue Ocean Validation**: Pioneer an unserved niche with high willingness-to-pay.
+  - **Negative-Review Arbitrage**: Attack established incumbents by fixing their most hated bugs and customer service pitfalls.
+  - **Vertical Specialization**: Build a hyper-tailored solution for a specific underserved industry vertical.
+  - **User Experience / Speed Overhaul**: Re-architect an incumbent's bloated legacy workflow into a lightning-fast modern tool.
+  - **Pivot or Halt Recommendation**: Clear, data-backed warnings when market saturation or platform risks make development unviable.
+
+### 7. Actionable Validation Playbooks
+- **Pre-Launch Execution Plans**: Generates customer discovery interview scripts, high-converting landing page value propositions, and targeted social ad testing copy.
+
+---
+
+## 🚀 Installation & Downloads
+
+### Method 1: Windows Package Manager (winget) — Recommended
+
+```powershell
+winget install NexusTools.Aether
 ```
 
-### 构建生产版本
+Upgrade:
 
-```bash
-npm run tauri build
+```powershell
+winget upgrade NexusTools.Aether
 ```
 
-## 项目结构
+---
 
-```
-src/                    # React 前端
-  components/           # UI 组件
-  types.ts              # TypeScript 类型定义
-  mockData.ts           # 默认配置
-src-tauri/              # Rust 后端
-  src/
-    main.rs             # Tauri 入口
-    lib.rs              # 库根
-    models/mod.rs       # 数据模型
-    db/mod.rs           # SQLite 数据库层
-    config/mod.rs       # 配置系统
-    adapters/           # 平台适配器 (Google, Reddit, G2, App Store)
-    scheduler/mod.rs    # 并行调度器
-    analysis/mod.rs     # 分析引擎 (信号抽取/主题聚类/评估/策略)
-    commands/mod.rs     # Tauri 命令
-  migrations/           # 数据库迁移
-  Cargo.toml
-  tauri.conf.json
-```
+### Method 2: Direct Download from GitHub Releases
 
-## 数据源覆盖
+Visit the [GitHub Releases](https://github.com/xtc002007/Aether/releases/latest) page to grab official builds:
+- `Aether_<version>_windows_x64_setup.exe` (Recommended Installer)
+- `Aether_<version>_windows_x64_portable.zip` (Portable Archive)
 
-| 类型 | 代表平台 | 状态 |
-|------|----------|------|
-| 搜索引擎 | Google Search | 已实现 |
-| 社区论坛 | Reddit | 已实现 |
-| 软件点评 | G2 / Capterra | 已实现 |
-| 应用商店 | App Store (iTunes API) | 已实现 |
-| 产品目录 | Product Hunt | 可启用 |
-| 社交媒体 | X / Twitter | 可启用 |
-| 替代品目录 | AlternativeTo | 可启用 |
+---
 
-## 三权配置体系
+### Method 3: Official NexusTools Suite
 
-- **系统默认**: 程序内置，开箱即用
-- **用户全局**: 在「设置中心」修改，持久化到 SQLite
-- **项目级覆盖**: 在「平台配置」针对单个项目独立调整
+Explore Aether and the entire productivity ecosystem at [https://nexustools.tech](https://nexustools.tech).
 
-## License
+---
 
-Proprietary. All rights reserved.
+## 🔒 Security & Local Privacy
+
+- **Local Data Sovereignty**: All research dossiers, crawled data, and competitive notes are stored in local SQLite (`WAL mode`) databases on your machine.
+- **Cryptographic Verification**: Every build includes Minisign signatures and Authenticode digital certificates.
+
+---
+
+## ⚖️ License & EULA
+
+Aether is proprietary software distributed under the [NexusTools End-User License Agreement (EULA)](./LICENSE).
+
+---
+
+## 💬 Community & Support
+
+- **Bug Reports & Inquiries**: [GitHub Issues](https://github.com/xtc002007/Aether/issues)
+- **Official Portal**: [https://nexustools.tech](https://nexustools.tech)
