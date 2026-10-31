@@ -401,21 +401,21 @@ jobs:
           elif [[ -f "release-notes.md" && -s "release-notes.md" ]]; then
             echo "Using existing release-notes.md"
           else
-            cat <<EOF > release-notes.md
-## ${APP_PRODUCT_NAME} ${RELEASE_TAG}
-
-### Download & Installation
-- **Windows (x64) Installer**: \`${APP_PRODUCT_NAME}_${RELEASE_TAG#v}_windows_x64_setup.exe\`
-- **Windows Package Manager (winget)**:
-  \`\`\`powershell
-  winget install ${WINGET_PACKAGE_IDENTIFIER}
-  \`\`\`
-- **Official Website**: https://nexustools.tech
-
-### Verification & Integrity
-- Digital signatures (minisign ed25519) verified on release.
-- Official in-app updates served via NexusTools secure cloud endpoints.
-EOF
+            {
+              echo "## ${APP_PRODUCT_NAME} ${RELEASE_TAG}"
+              echo
+              echo "### Download & Installation"
+              echo "- **Windows (x64) Installer**: \`${APP_PRODUCT_NAME}_${RELEASE_TAG#v}_windows_x64_setup.exe\`"
+              echo "- **Windows Package Manager (winget)**:"
+              echo '  ```powershell'
+              echo "  winget install ${WINGET_PACKAGE_IDENTIFIER}"
+              echo '  ```'
+              echo "- **Official Website**: https://nexustools.tech"
+              echo
+              echo "### Verification & Integrity"
+              echo "- Digital signatures (minisign ed25519) verified on release."
+              echo "- Official in-app updates served via NexusTools secure cloud endpoints."
+            } > release-notes.md
           fi
 
       - name: Download bundled artifacts
@@ -516,5 +516,5 @@ EOF
           release-repository: ${{ env.PUBLIC_REPO }}
           release-tag: ${{ env.RELEASE_TAG }}
           token: ${{ secrets.WINGET_PAT }}
-          installers-regex: '_setup\.exe
+          installers-regex: '_setup\.exe$'
 
