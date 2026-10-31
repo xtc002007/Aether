@@ -452,6 +452,18 @@ EOF
           export RELEASE_VERSION="${RELEASE_VERSION#v}"
           node .release-scripts/scripts/release/generate-updater-manifest.mjs
 
+      - name: Collect release files
+        id: release_files
+        shell: bash
+        run: |
+          set -euo pipefail
+          find release-assets -type f ! -name 'release-metadata.json' | sort > release-files.txt
+          {
+            echo 'paths<<__FILES__'
+            cat release-files.txt
+            echo '__FILES__'
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
@@ -468,6 +480,7 @@ EOF
 
       - name: Sync updater manifest to NexusTools API
         if: env.BUILD_FLAVOR == 'direct'
+        continue-on-error: true
         env:
           NEXUSTOOLS_API_URL: ${{ env.NEXUSTOOLS_API_URL }}
           NEXUSTOOLS_CONFIG_KEY: ${{ secrets.NEXUSTOOLS_CONFIG_KEY }}
@@ -484,16 +497,24 @@ EOF
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Check WINGET_PAT availability
+        id: check_token
+        env:
+          WINGET_PAT: ${{ secrets.WINGET_PAT }}
+        run: |
+          if [ -n "$WINGET_PAT" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::WINGET_PAT secret is not configured. Automated winget submission skipped."
+          fi
       - name: Publish to winget-pkgs
-        if: "${{ secrets.WINGET_PAT != '' }}"
+        if: steps.check_token.outputs.has_token == 'true'
         uses: vedantmgoyal9/winget-releaser@v2
         with:
           identifier: ${{ env.WINGET_PACKAGE_IDENTIFIER }}
           release-repository: ${{ env.PUBLIC_REPO }}
           release-tag: ${{ env.RELEASE_TAG }}
           token: ${{ secrets.WINGET_PAT }}
-          installers-regex: '_setup\.exe$'
-      - name: Skip winget notification
-        if: "${{ secrets.WINGET_PAT == '' }}"
-        run: |
-          echo "::notice::WINGET_PAT secret is not configured. Automated winget submission skipped."
+          installers-regex: '_setup\.exe
+
