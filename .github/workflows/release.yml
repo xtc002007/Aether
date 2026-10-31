@@ -510,6 +510,7 @@ jobs:
           fi
       - name: Publish to winget-pkgs
         if: steps.check_token.outputs.has_token == 'true'
+        continue-on-error: true
         uses: vedantmgoyal9/winget-releaser@v2
         with:
           identifier: ${{ env.WINGET_PACKAGE_IDENTIFIER }}
