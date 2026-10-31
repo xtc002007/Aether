@@ -169,7 +169,7 @@ pub fn cluster_topics(user_voices: &[UserVoice]) -> Vec<crate::models::TopicClus
 
 /// LLM-assisted topic clustering — groups voices into named themes.
 pub async fn try_llm_cluster_topics(user_voices: &[UserVoice]) -> Vec<TopicCluster> {
-    match crate::llm::deepseek::DeepSeekProvider::from_env() {
+    match crate::llm::resolver::ResolvedLlm::resolve() {
         Ok(llm) => {
             let voices_text: Vec<String> = user_voices.iter().enumerate()
                 .map(|(i, v)| format!("[{}] ({}): {}", i,
@@ -497,7 +497,7 @@ pub async fn try_llm_generate_strategy(
     strategy_mode: Option<&str>,
     language: &str,
 ) -> Strategy {
-    match crate::llm::deepseek::DeepSeekProvider::from_env() {
+    match crate::llm::resolver::ResolvedLlm::resolve() {
         Ok(llm) => {
             let competitor_info: Vec<String> = competitors.iter()
                 .map(|c| format!("- {}: {} (pros: {}, cons: {})", c.name, c.positioning, c.pros, c.cons))
@@ -560,7 +560,7 @@ pub async fn try_llm_generate_validation(
     idea_statement: &str,
     language: &str,
 ) -> Vec<ValidationAction> {
-    match crate::llm::deepseek::DeepSeekProvider::from_env() {
+    match crate::llm::resolver::ResolvedLlm::resolve() {
         Ok(llm) => {
             let dim_info: Vec<String> = evaluation.dimensions.iter()
                 .map(|d| format!("- {}: {}/10 - {}", d.name, d.score, d.reason))
@@ -609,7 +609,7 @@ pub async fn try_llm_enrich_competitors(
 ) {
     if competitors.is_empty() { return; }
 
-    match crate::llm::deepseek::DeepSeekProvider::from_env() {
+    match crate::llm::resolver::ResolvedLlm::resolve() {
         Ok(llm) => {
             // Build a context string from all search results
             let corpus: String = search_results.iter()
@@ -660,7 +660,7 @@ pub async fn try_llm_extract_signals(
     project_id: &str,
     language: &str,
 ) -> Vec<Signal> {
-    match crate::llm::deepseek::DeepSeekProvider::from_env() {
+    match crate::llm::resolver::ResolvedLlm::resolve() {
         Ok(llm) => {
             let voices_text: Vec<String> = user_voices.iter().enumerate()
                 .map(|(i, v)| format!("[{}] ({}) [{}]: {}",
@@ -776,7 +776,7 @@ pub async fn try_llm_correct_evaluation(
         return evaluation;
     }
 
-    match crate::llm::deepseek::DeepSeekProvider::from_env() {
+    match crate::llm::resolver::ResolvedLlm::resolve() {
         Ok(llm) => {
             let signal_summary: Vec<String> = signals.iter().take(10)
                 .map(|s| format!("[{}] {} — {}", s.signal_type.label_en(), s.content.chars().take(120).collect::<String>(), s.source_platform))
@@ -992,7 +992,7 @@ pub fn extract_community_vocabulary(results: &[crate::adapters::SearchResult]) -
 pub async fn try_llm_extract_vocabulary(
     results: &[crate::adapters::SearchResult],
 ) -> VocabSet {
-    match crate::llm::deepseek::DeepSeekProvider::from_env() {
+    match crate::llm::resolver::ResolvedLlm::resolve() {
         Ok(llm) => {
             let corpus: String = results.iter()
                 .filter_map(|r| {

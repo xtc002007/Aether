@@ -1,7 +1,7 @@
-//! Search provider abstraction — supports SerpAPI and Serper.dev.
-//! Used by adapters that need general web search (Google, site:domain queries).
+//! Search provider abstraction — supports SerpAPI, Serper.dev, and NexusTools platform proxy.
 
 use super::types::{SearchProvider, SearchResult};
+use crate::llm::platform::{get_platform_auth, PlatformLlm};
 
 /// Execute a web search query through the configured provider.
 /// Returns structured search results from SERP.
@@ -12,7 +12,12 @@ pub async fn web_search(
     match provider {
         SearchProvider::SerpApi => serpapi_search(query).await,
         SearchProvider::Serper => serper_search(query).await,
-        SearchProvider::None => Err("No search provider configured. Set SERP_API_KEY or SERPER_API_KEY.".into()),
+        SearchProvider::None => {
+            if let Some(auth) = get_platform_auth() {
+                return platform_search(query, &auth).await;
+            }
+            Err("No search provider configured. Set SERP_API_KEY or SERPER_API_KEY, or sign in for platform search.".into())
+        }
     }
 }
 
@@ -88,6 +93,26 @@ async fn serper_search(query: &str) -> Result<Vec<SearchResult>, String> {
                 content_text: r["snippet"].as_str().map(|s| s.to_string()),
             });
         }
+    }
+    Ok(results)
+}
+
+async fn platform_search(query: &str, auth: &crate::llm::platform::PlatformAuth) -> Result<Vec<SearchResult>, String> {
+    let platform = PlatformLlm::new(auth.clone());
+    let organic = platform.search(query).await?;
+    let mut results = Vec::new();
+    for r in organic {
+        results.push(SearchResult {
+            title: r["title"].as_str().unwrap_or("").to_string(),
+            url: r["link"].as_str().unwrap_or("").to_string(),
+            summary: r["snippet"].as_str().unwrap_or("").to_string(),
+            rating: None,
+            review_count: None,
+            date: None,
+            author: None,
+            platform: "Google Search".into(),
+            content_text: r["snippet"].as_str().map(|s| s.to_string()),
+        });
     }
     Ok(results)
 }

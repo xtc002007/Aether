@@ -1,0 +1,31 @@
+﻿# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: NexusTools.Aether
+PackageVersion: 0.1.5
+PackageLocale: en-US
+Publisher: NexusTools
+PublisherUrl: https://nexustools.tech
+PublisherSupportUrl: https://github.com/xtc002007/Aether/issues
+Author: xtc002007
+PackageName: Aether
+PackageUrl: https://github.com/xtc002007/Aether
+License: MIT
+LicenseUrl: https://github.com/xtc002007/Aether/blob/main/LICENSE
+Copyright: Copyright (c) 2026 NexusTools
+ShortDescription: Market intelligence, competitive auditing & product strategy decision engine.
+Description: |-
+  Aether is an open-source intelligence engine built with Tauri v2, React 19, and Rust.
+  Features:
+  - 8 Intelligence Sources: Aggregates insights from Google, Reddit, G2, App Store, Product Hunt, etc.
+  - 10 Commercial Signal Extractors: Discovers pain points, pricing objections, and feature gaps.
+  - 9-Dimensional Product Evaluation Matrix & 5 Market Entry Strategy Generators.
+Tags:
+  - intelligence
+  - market-research
+  - strategy
+  - product-management
+  - open-source
+  - tauri
+  - rust
+ReleaseNotesUrl: https://github.com/xtc002007/Aether/releases/tag/v0.1.5
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

@@ -28,6 +28,9 @@
     }
   },
   "bundle": {
+    "macOS": {
+      "entitlements": "entitlements.plist"
+    },
     "active": true,
     "targets": [
       "nsis",

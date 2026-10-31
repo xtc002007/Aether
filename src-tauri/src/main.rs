@@ -68,6 +68,8 @@ fn main() {
             commands::config::get_project_platform_overrides,
             commands::config::set_project_platform_override,
             commands::config::reset_project_platform_override,
+            commands::platform::sync_platform_auth,
+            commands::platform::clear_platform_auth,
             commands::project::add_competitor,
             commands::project::delete_competitor,
             commands::project::move_competitor_group,
@@ -88,6 +90,10 @@ fn main() {
             commands::project::get_competitor_evidence,
             commands::device::get_machine_fingerprint,
             commands::device::get_os_info,
+            commands::device::nexus_device_attestation,
+            commands::secrets::secrets_get,
+            commands::secrets::secrets_set,
+            commands::secrets::secrets_delete,
         ])
         .run(tauri::generate_context!())
         .expect("Failed to launch Aether application");

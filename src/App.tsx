@@ -21,12 +21,12 @@ import PlatformConfigView from "./components/PlatformConfigView";
 import CompareView from "./components/CompareView";
 import SnapshotManager from "./components/SnapshotManager";
 import { AccountPanel } from "./nexustools/AccountPanel";
+import { CreditsStatusBar } from "./nexustools/CreditsStatusBar";
 import { ActivationGuard } from "./nexustools/ActivationGuard";
 import { ActivationReminderBanner } from "./nexustools/ActivationReminderBanner";
 import { AnonymousBanner } from "./nexustools/AnonymousBanner";
 import { useNexusAuth } from "./nexustools/useNexusAuth";
 import { getWebsiteUrl } from "./nexustools/client";
-
 import {
   Home, Layers, Settings, Play, Layout,
   ChevronLeft, ChevronRight, HelpCircle, ArrowLeftRight,
@@ -34,6 +34,14 @@ import {
   MessageSquare, Sliders, Radio, RefreshCw, FileText as ReportIcon,
   ClipboardCopy, Bell, History, X as XIcon, Loader2
 } from "lucide-react";
+
+function newDesktopSessionId(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let bin = '';
+  bytes.forEach((b) => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
 export default function App() {
   const { loginWithToken } = useNexusAuth();
@@ -112,9 +120,20 @@ export default function App() {
 
   const handleDesktopLogin = useCallback(async () => {
     clearDesktopLoginPoll();
-    const sessionId = 'session_' + Math.random().toString(36).substring(2, 11);
+    const sessionId = newDesktopSessionId();
     const baseUrl = getWebsiteUrl();
-    const loginUrl = `${baseUrl}/?session_id=${encodeURIComponent(sessionId)}`;
+    const loginUrl = `${baseUrl}/?session_id=${encodeURIComponent(sessionId)}&app=aether`;
+
+    const syncApiUrl = import.meta.env.VITE_NEXUSTOOLS_API_URL || 'https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev';
+    try {
+      await fetch(`${String(syncApiUrl).replace(/\/$/, '')}/api/auth/desktop-token`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, app: 'aether' }),
+      });
+    } catch (err) {
+      console.error('[Aether Auth] Failed to create desktop session', err);
+    }
 
     try {
       const { open } = await import('@tauri-apps/plugin-shell');
@@ -124,7 +143,6 @@ export default function App() {
       window.open(loginUrl, '_blank');
     }
 
-    const syncApiUrl = import.meta.env.VITE_NEXUSTOOLS_API_URL || 'https://pbithxqiu7.execute-api.us-east-2.amazonaws.com/dev';
     const pollUrl = `${syncApiUrl}/api/auth/desktop-token?sessionId=${encodeURIComponent(sessionId)}`;
 
     let pollCount = 0;
@@ -853,6 +871,7 @@ export default function App() {
             >
               {cn ? "EN" : "中"}
             </button>
+            <CreditsStatusBar cn={cn} />
             <AccountPanel variant="header" cn={cn} onLoginClick={handleDesktopLogin} />
           </div>
         </div>

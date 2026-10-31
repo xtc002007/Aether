@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { NexusUser, FullLicenseStatus, ActivationConfig } from 'nexustools-sdk';
 import { getNexusClient, initNexusClient } from './client';
+import { syncRustPlatformAuth } from './syncPlatformAuth';
 
 export function useNexusAuth() {
   const [user, setUser] = useState<NexusUser | null>(null);
@@ -32,6 +34,7 @@ export function useNexusAuth() {
         setUser(u);
         if (u) {
           await client.onLoginComplete();
+          await syncRustPlatformAuth();
           const status = await client.licenses.getFullStatus();
           if (isSubscribed) setFullStatus(status);
         } else {
@@ -52,7 +55,9 @@ export function useNexusAuth() {
       setUser(u);
       if (u) {
         await client.onLoginComplete();
+        await syncRustPlatformAuth();
       } else {
+        await invoke('clear_platform_auth').catch(() => {});
         await client.licenses.clearCache();
       }
       const status = await client.licenses.getFullStatus();
@@ -84,6 +89,7 @@ export function useNexusAuth() {
 
   const logout = async () => {
     await getNexusClient().logout();
+    await invoke('clear_platform_auth').catch(() => {});
     setUser(null);
     setFullStatus(null);
   };

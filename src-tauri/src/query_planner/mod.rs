@@ -33,7 +33,7 @@ pub async fn generate_query_plans(
     _region: &str,
 ) -> Vec<PlatformQueryPlan> {
     // Try LLM first
-    if let Ok(llm) = crate::llm::deepseek::DeepSeekProvider::from_env() {
+    if let Ok(llm) = crate::llm::resolver::ResolvedLlm::resolve() {
         if let Ok(plans) = try_llm_query_plans(&llm, idea_model, platform_configs, language).await {
             return plans;
         }
@@ -44,7 +44,7 @@ pub async fn generate_query_plans(
 }
 
 async fn try_llm_query_plans(
-    llm: &crate::llm::deepseek::DeepSeekProvider,
+    llm: &crate::llm::resolver::ResolvedLlm,
     idea_model: &IdeaModel,
     platform_configs: &[PlatformConfig],
     user_language: &str,

@@ -71,7 +71,7 @@ pub async fn run_analysis_pipeline(
 
     // 3. Platform search — warn about missing API keys first
     let api_configured = crate::adapters::is_search_api_configured();
-    let llm_configured = crate::llm::deepseek::DeepSeekProvider::from_env().is_ok();
+    let llm_configured = crate::llm::resolver::ResolvedLlm::resolve().is_ok();
     let mut warnings: Vec<String> = Vec::new();
 
     if !api_configured {
@@ -403,7 +403,7 @@ async fn finalize_project(db: &Database, project: ResearchProject) -> Result<Res
 // ── LLM helpers ──
 
 pub async fn try_llm_model_idea(statement: &str, product_form: &str, language: &str) -> IdeaModelExtension {
-    match crate::llm::deepseek::DeepSeekProvider::from_env() {
+    match crate::llm::resolver::ResolvedLlm::resolve() {
         Ok(llm) => {
             let is_en = language == "en";
             let (target_user_hint, core_job_hint, scenario_hint) = if is_en {

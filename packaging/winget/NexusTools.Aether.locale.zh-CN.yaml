@@ -1,0 +1,27 @@
+﻿# yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.1.6.0.schema.json
+PackageIdentifier: NexusTools.Aether
+PackageVersion: 0.1.5
+PackageLocale: zh-CN
+Publisher: NexusTools
+PublisherUrl: https://nexustools.tech
+PublisherSupportUrl: https://github.com/xtc002007/Aether/issues
+Author: xtc002007
+PackageName: Aether
+PackageUrl: https://github.com/xtc002007/Aether
+License: MIT
+LicenseUrl: https://github.com/xtc002007/Aether/blob/main/LICENSE
+Copyright: Copyright (c) 2026 NexusTools
+ShortDescription: 商业情报侦测、竞品审计与产品切入策略决策引擎。
+Description: |-
+  Aether 是一款基于 Tauri v2 + React 19 + Rust 构建的开源商业情报与产品战略决策引擎。
+  - 覆盖 8 大主流公开情报源（Google, Reddit, G2, App Store, Product Hunt 等）。
+  - 抽取 10 类高价值商业信号（用户真实痛点、定价抱怨、替代诉求）。
+  - 9 维产品商业价值矩阵与 5 大市场切入策略生成。
+Tags:
+  - 商业情报
+  - 竞品分析
+  - 产品战略
+  - 决策引擎
+ReleaseNotesUrl: https://github.com/xtc002007/Aether/releases/tag/v0.1.5
+ManifestType: locale
+ManifestVersion: 1.6.0

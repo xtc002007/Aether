@@ -1,0 +1,21 @@
+﻿# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+PackageIdentifier: NexusTools.Aether
+PackageVersion: 0.1.5
+Platform:
+  - Windows.Desktop
+InstallModes:
+  - interactive
+  - silent
+InstallerType: nullsoft
+Scope: user
+InstallerSwitches:
+  Silent: /S
+  SilentWithProgress: /S
+UpgradeBehavior: install
+ReleaseDate: 2026-10-30
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/xtc002007/Aether/releases/download/v0.1.5/Aether_0.1.5_windows_x64_setup.exe
+    InstallerSha256: BF23CA07559C1ECCD32E11DC0D232601CB3FD5C03DF5866B1E36F315476C7BD8
+ManifestType: installer
+ManifestVersion: 1.6.0

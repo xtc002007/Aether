@@ -36,6 +36,11 @@ AETHER_UPDATER_ENDPOINT=https://github.com/xtc002007/Aether/releases/latest/down
 
 公钥也可不写进 `.env`，构建脚本会自动读取 `signing/aether.key.pub`。
 
+## 文档
+
+- 本工具专属参数：[docs/release.md](../docs/release.md)
+- 通用打包/更新：[docs/tauri-package-update/system.md](../../../docs/tauri-package-update/system.md)
+
 ## CI / GitHub Secrets
 
 | Secret | 说明 |

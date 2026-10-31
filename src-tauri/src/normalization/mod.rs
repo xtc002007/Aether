@@ -171,7 +171,7 @@ pub async fn try_llm_deduplicate_entities(names: &[String]) -> Vec<Vec<String>> 
         return if names.is_empty() { vec![] } else { vec![names.to_vec()] };
     }
 
-    match crate::llm::deepseek::DeepSeekProvider::from_env() {
+    match crate::llm::resolver::ResolvedLlm::resolve() {
         Ok(llm) => {
             let items: Vec<String> = names.iter().enumerate()
                 .map(|(i, n)| format!("[{}] {}", i, n))

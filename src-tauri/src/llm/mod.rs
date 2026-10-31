@@ -1,4 +1,6 @@
 pub mod deepseek;
+pub mod platform;
+pub mod resolver;
 
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;

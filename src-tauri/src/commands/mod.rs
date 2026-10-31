@@ -8,6 +8,9 @@ pub mod snapshot;
 pub mod export;
 pub mod modeling;
 pub mod device;
+pub mod platform_attest;
+pub mod platform;
+pub mod secrets;
 
 use crate::db::Database;
 use crate::scheduler::Scheduler;

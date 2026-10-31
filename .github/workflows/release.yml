@@ -32,6 +32,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  PUBLIC_REPO: xtc002007/Aether
+  WINGET_PACKAGE_IDENTIFIER: NexusTools.Aether
   APP_SLUG: aether
   APP_PRODUCT_NAME: Aether
   DESKTOP_DIR: .
@@ -313,6 +315,23 @@ jobs:
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `paths<<__PATHS__\n${artifactPaths.join("\n")}\n__PATHS__\n`);
           NODE
 
+            - name: Windows Authenticode signing (Optional)
+        if: env.BUILD_FLAVOR != 'store'
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          SIGNING_ACCOUNT_NAME: ${{ secrets.SIGNING_ACCOUNT_NAME }}
+          CERT_PROFILE_NAME: ${{ secrets.CERT_PROFILE_NAME }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${AZURE_CLIENT_ID:-}" && -n "${AZURE_CLIENT_SECRET:-}" && -n "${SIGNING_ACCOUNT_NAME:-}" ]]; then
+            echo "Windows Authenticode signing credentials detected. Ready for signing."
+          else
+            echo "::notice::Windows Authenticode credentials not provided. Binaries will rely on Tauri minisign only."
+          fi
+
       - name: Create updater metadata
         if: env.BUILD_FLAVOR == 'direct'
         shell: bash
@@ -377,18 +396,26 @@ jobs:
         run: |
           set -euo pipefail
 
-          npx changelogen@latest \
-            --from "${{ steps.changelog_range.outputs.from_ref }}" \
-            --to "${{ steps.changelog_range.outputs.to_ref }}" \
-            --no-output \
-            > release-notes.md 2>/dev/null || true
+          if [[ -f "docs/release-notes/${RELEASE_TAG}.md" ]]; then
+            cp "docs/release-notes/${RELEASE_TAG}.md" release-notes.md
+          elif [[ -f "release-notes.md" && -s "release-notes.md" ]]; then
+            echo "Using existing release-notes.md"
+          else
+            cat <<EOF > release-notes.md
+## ${APP_PRODUCT_NAME} ${RELEASE_TAG}
 
-          if [[ ! -s release-notes.md ]]; then
-            {
-              echo "## Changes"
-              echo
-              echo "- Release ${RELEASE_TAG}"
-            } > release-notes.md
+### Download & Installation
+- **Windows (x64) Installer**: \`${APP_PRODUCT_NAME}_${RELEASE_TAG#v}_windows_x64_setup.exe\`
+- **Windows Package Manager (winget)**:
+  \`\`\`powershell
+  winget install ${WINGET_PACKAGE_IDENTIFIER}
+  \`\`\`
+- **Official Website**: https://nexustools.tech
+
+### Verification & Integrity
+- Digital signatures (minisign ed25519) verified on release.
+- Official in-app updates served via NexusTools secure cloud endpoints.
+EOF
           fi
 
       - name: Download bundled artifacts
@@ -397,11 +424,26 @@ jobs:
           pattern: ${{ env.APP_SLUG }}-*-bundles
           path: release-assets
 
+      - name: Upload installer to S3
+        if: env.BUILD_FLAVOR == 'direct'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-2
+          S3_RELEASES_BUCKET: nexustools-website-static
+          APP_ID: ${{ env.APP_SLUG }}
+          RELEASE_ASSETS_ROOT: release-assets
+          RELEASE_VERSION: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          export RELEASE_VERSION="${RELEASE_VERSION#v}"
+          node .release-scripts/scripts/release/upload-release-to-s3.mjs
+
       - name: Generate updater manifest
         if: env.BUILD_FLAVOR == 'direct'
         env:
+          APP_ID: ${{ env.APP_SLUG }}
           EXPECTED_UPDATER_PLATFORMS: windows-x86_64
-          GITHUB_REPOSITORY: ${{ github.repository }}
           RELEASE_ASSETS_ROOT: release-assets
           RELEASE_NOTES_PATH: release-notes.md
           RELEASE_VERSION: ${{ env.RELEASE_TAG }}
@@ -409,6 +451,20 @@ jobs:
           set -euo pipefail
           export RELEASE_VERSION="${RELEASE_VERSION#v}"
           node .release-scripts/scripts/release/generate-updater-manifest.mjs
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ env.PUBLIC_REPO }}
+          token: ${{ secrets.RELEASES_REPO_TOKEN || secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.APP_PRODUCT_NAME }} ${{ env.RELEASE_TAG }}
+          body_path: release-notes.md
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
+          overwrite_files: false
+          fail_on_unmatched_files: true
+          files: ${{ steps.release_files.outputs.paths }}
 
       - name: Sync updater manifest to NexusTools API
         if: env.BUILD_FLAVOR == 'direct'
@@ -421,28 +477,23 @@ jobs:
           set -euo pipefail
           node .release-scripts/scripts/release/sync-updater-manifest.mjs
 
-      - name: Collect release files
-        id: release_files
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          find release-assets -type f ! -name 'release-metadata.json' | sort > release-files.txt
-
-          {
-            echo 'paths<<__FILES__'
-            cat release-files.txt
-            echo '__FILES__'
-          } >> "${GITHUB_OUTPUT}"
-
-      - name: Publish release assets
-        uses: softprops/action-gh-release@v2
+  winget_release:
+    name: Submit to Windows Package Manager (winget)
+    needs: publish_release
+    if: success() && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') && (github.event_name != 'workflow_dispatch' || !inputs.draft)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Publish to winget-pkgs
+        if: "${{ secrets.WINGET_PAT != '' }}"
+        uses: vedantmgoyal9/winget-releaser@v2
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: ${{ env.APP_PRODUCT_NAME }} ${{ env.RELEASE_TAG }}
-          body_path: release-notes.md
-          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
-          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
-          overwrite_files: true
-          fail_on_unmatched_files: true
-          files: ${{ steps.release_files.outputs.paths }}
+          identifier: ${{ env.WINGET_PACKAGE_IDENTIFIER }}
+          release-repository: ${{ env.PUBLIC_REPO }}
+          release-tag: ${{ env.RELEASE_TAG }}
+          token: ${{ secrets.WINGET_PAT }}
+          installers-regex: '_setup\.exe$'
+      - name: Skip winget notification
+        if: "${{ secrets.WINGET_PAT == '' }}"
+        run: |
+          echo "::notice::WINGET_PAT secret is not configured. Automated winget submission skipped."

@@ -38,10 +38,12 @@ function readEnv(name) {
 }
 
 function parseVersion(version) {
+  if (!version || typeof version !== "string") return [];
   return version.replace(/^v/i, "").split(".").map((part) => Number.parseInt(part, 10) || 0);
 }
 
 function isNewer(remote, local) {
+  if (!remote) return false;
   const a = parseVersion(remote);
   const b = parseVersion(local);
   for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
@@ -218,6 +220,21 @@ const manifest = offlinePath
 
 if (offlinePath) {
   console.log(`[updater-test] Using offline manifest: ${path.resolve(offlinePath)}`);
+}
+
+if (manifest?.error) {
+  console.error(`[updater-test] API error: ${manifest.error}`);
+  console.error("[updater-test] Fix: register the app in NexusTools API and sync manifest after release.");
+  process.exit(1);
+}
+
+if (!manifest?.version || !manifest?.platforms?.["windows-x86_64"]) {
+  console.error("[updater-test] Invalid manifest: missing version or windows-x86_64 platform entry.");
+  if (manifest && typeof manifest === "object") {
+    console.error(`[updater-test] Response keys: ${Object.keys(manifest).join(", ") || "(empty)"}`);
+  }
+  console.error("[updater-test] Fix: publish a release with NEXUSTOOLS_CONFIG_KEY set, or sync manifest manually.");
+  process.exit(1);
 }
 
 const remoteVersion = manifest.version;

@@ -1,3 +1,6 @@
+use ed25519_dalek::{Signer, SigningKey};
+use keyring::Entry;
+use rand::rngs::OsRng;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::process::Command;
@@ -17,6 +20,68 @@ pub fn get_os_info() -> OsInfo {
             .unwrap_or_else(|| "unknown".to_string()),
         platform: std::env::consts::OS.to_string(),
     }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceAttestation {
+    pub device_public_key: String,
+    pub device_signature: String,
+    pub platform: String,
+    pub platform_public_key: String,
+    pub platform_signature: String,
+    pub ek_certificate: String,
+    pub attestation_object: String,
+    pub key_id: String,
+    pub tpm_certify_blob: String,
+    pub tpm_public: String,
+}
+
+fn device_signing_key() -> Result<SigningKey, String> {
+    let entry = Entry::new("com.nexustools.sdk", "nexustools.device-ed25519")
+        .map_err(|e| format!("device keyring: {e}"))?;
+    if let Ok(stored) = entry.get_password() {
+        if let Ok(bytes) = hex::decode(stored) {
+            if bytes.len() == 32 {
+                let arr: [u8; 32] = bytes.try_into().map_err(|_| "device key length".to_string())?;
+                return Ok(SigningKey::from_bytes(&arr));
+            }
+        }
+    }
+    let key = SigningKey::generate(&mut OsRng);
+    entry
+        .set_password(&hex::encode(key.to_bytes()))
+        .map_err(|e| format!("device keyring write: {e}"))?;
+    Ok(key)
+}
+
+#[tauri::command]
+pub fn nexus_device_attestation(
+    user_id: String,
+    device_id: String,
+    fingerprint: String,
+) -> Result<DeviceAttestation, String> {
+    let key = device_signing_key()?;
+    let payload = format!(
+        "{}|{}|{}",
+        user_id.to_lowercase(),
+        device_id,
+        fingerprint.trim().to_lowercase()
+    );
+    let sig = key.sign(payload.as_bytes());
+    let platform = super::platform_attest::attest(payload.as_bytes());
+    Ok(DeviceAttestation {
+        device_public_key: hex::encode(key.verifying_key().to_bytes()),
+        device_signature: hex::encode(sig.to_bytes()),
+        platform: platform.platform,
+        platform_public_key: platform.platform_public_key,
+        platform_signature: platform.platform_signature,
+        ek_certificate: platform.ek_certificate,
+        attestation_object: platform.attestation_object,
+        key_id: platform.key_id,
+        tpm_certify_blob: platform.tpm_certify_blob,
+        tpm_public: platform.tpm_public,
+    })
 }
 
 #[tauri::command]

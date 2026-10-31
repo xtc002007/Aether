@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { getS3ReleaseUrl } from "./release-s3.mjs";
 
 function requireEnv(name) {
   const value = process.env[name]?.trim();
@@ -29,7 +30,7 @@ function findFileByBasename(rootDir, fileName) {
 const root = process.env.RELEASE_ASSETS_ROOT || "release-assets";
 const version = requireEnv("RELEASE_VERSION");
 const notesPath = process.env.RELEASE_NOTES_PATH || "release-notes.md";
-const repository = requireEnv("GITHUB_REPOSITORY");
+const appId = process.env.APP_ID || "aether";
 const notes = fs.existsSync(notesPath) ? fs.readFileSync(notesPath, "utf8").trim() : "";
 const expectedPlatforms = (process.env.EXPECTED_UPDATER_PLATFORMS || "")
   .split(",")
@@ -64,7 +65,7 @@ for (const metadataPath of metadataPaths) {
 
   platforms[metadata.updaterPlatform] = {
     signature: fs.readFileSync(signaturePath, "utf8").trim(),
-    url: `https://github.com/${repository}/releases/latest/download/${metadata.bundleName}`,
+    url: getS3ReleaseUrl(appId, metadata.bundleName),
   };
 }
 

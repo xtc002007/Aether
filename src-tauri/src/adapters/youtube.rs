@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use crate::models::PlatformConfig;
 use super::traits::PlatformAdapter;
 use super::types::{SearchProvider, SearchResult};
+use super::search_provider;
 
 pub struct YouTubeAdapter {
     provider: SearchProvider,
@@ -20,8 +21,13 @@ impl PlatformAdapter for YouTubeAdapter {
     async fn search(&self, query: &str, _config: &PlatformConfig) -> Result<Vec<SearchResult>, String> {
         match self.provider {
             SearchProvider::SerpApi => serpapi_youtube_search(query).await,
-            SearchProvider::Serper => serper_fallback(query, "YouTube").await,
-            SearchProvider::None => Err("No search provider configured. Set SERP_API_KEY for YouTube search.".into()),
+            SearchProvider::Serper | SearchProvider::None => {
+                let mut results = search_provider::site_search("youtube.com", query, &self.provider).await?;
+                for r in &mut results {
+                    r.platform = "YouTube".into();
+                }
+                Ok(results)
+            }
         }
     }
 }
@@ -57,36 +63,6 @@ async fn serpapi_youtube_search(query: &str) -> Result<Vec<SearchResult>, String
                 author: channel,
                 platform: "YouTube".into(),
                 content_text: Some(format!("{}\n{}", title, snippet)),
-            });
-        }
-    }
-    Ok(results)
-}
-
-async fn serper_fallback(query: &str, platform: &str) -> Result<Vec<SearchResult>, String> {
-    // Fallback: search via Serper.dev with site:youtube.com
-    let api_key = std::env::var("SERPER_API_KEY")
-        .map_err(|_| "SERPER_API_KEY not set".to_string())?;
-    let client = reqwest::Client::new();
-    let search_query = format!("site:youtube.com {}", query);
-    let body = serde_json::json!({"q": search_query, "num": 10, "gl": "us", "hl": "en"});
-    let resp = client.post("https://google.serper.dev/search")
-        .header("X-API-KEY", &api_key)
-        .header("Content-Type", "application/json")
-        .json(&body)
-        .timeout(std::time::Duration::from_secs(20))
-        .send().await.map_err(|e| format!("Serper HTTP: {}", e))?;
-    let json: serde_json::Value = resp.json().await.map_err(|e| format!("Serper JSON: {}", e))?;
-    let mut results = Vec::new();
-    if let Some(organic) = json["organic"].as_array() {
-        for r in organic {
-            results.push(SearchResult {
-                title: r["title"].as_str().unwrap_or("").to_string(),
-                url: r["link"].as_str().unwrap_or("").to_string(),
-                summary: r["snippet"].as_str().unwrap_or("").to_string(),
-                rating: None, review_count: None, date: None, author: None,
-                platform: platform.to_string(),
-                content_text: r["snippet"].as_str().map(|s| s.to_string()),
             });
         }
     }

@@ -23,6 +23,7 @@ export function getNexusClient(): NexusToolsClient {
       apiUrl,
       appId: 'aether',
       storage,
+      streamUrl: import.meta.env.VITE_LLM_STREAM_URL,
     });
   }
   return _client;
