@@ -26,6 +26,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   group: release-${{ github.workflow }}-${{ github.ref }}
@@ -424,11 +425,16 @@ jobs:
           pattern: ${{ env.APP_SLUG }}-*-bundles
           path: release-assets
 
+      - name: Configure AWS credentials for S3 upload
+        if: env.BUILD_FLAVOR == 'direct'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::994899741408:role/GitHubActions-NexusTools-Releases
+          aws-region: us-east-2
+
       - name: Upload installer to S3
         if: env.BUILD_FLAVOR == 'direct'
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-2
           S3_RELEASES_BUCKET: nexustools-website-static
           APP_ID: ${{ env.APP_SLUG }}
