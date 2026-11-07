@@ -81,17 +81,7 @@ if ($patToken) {
 }
 
 # 3. AWS S3 Upload Credentials
-$awsKey = $env:AWS_ACCESS_KEY_ID
-$awsSecret = $env:AWS_SECRET_ACCESS_KEY
-if (-not $awsKey) { $awsKey = Get-DotEnvValue "AWS_ACCESS_KEY_ID" }
-if (-not $awsSecret) { $awsSecret = Get-DotEnvValue "AWS_SECRET_ACCESS_KEY" }
-if ($awsKey -and $awsSecret) {
-  gh secret set AWS_ACCESS_KEY_ID -R $repo -b $awsKey
-  gh secret set AWS_SECRET_ACCESS_KEY -R $repo -b $awsSecret
-  Write-Host "[+] AWS S3 upload secrets set" -ForegroundColor Green
-} else {
-  Write-Host "[!] AWS credentials skipped (needed for S3 release uploads)" -ForegroundColor Yellow
-}
+Write-Host "[i] AWS S3 release uploads use GitHub OIDC (no static AWS_ACCESS_KEY_ID secret needed)" -ForegroundColor DarkGray
 
 # 4. RELEASES_REPO_TOKEN (for publishing from private repo to public repo)
 $releaseToken = $env:RELEASES_REPO_TOKEN
